@@ -34,13 +34,15 @@ namespace ColumnRebar
 
         private ComboBox _longLegDir, _fillMode;
         private ComboBox _longType, _longTypeInter, _stType, _stHook, _stOrient, _tieType, _tieHook, _tieOrient, _tieDir;
-        private TextBox _longBottom, _longTop, _longLeg, _cntRow, _cntCol;
+        private TextBox _longBottom, _longTop, _longLeg;
         private Grid _linesGrid;
         private TextBlock _linesCaption;
         /// <summary>Entradas del cuadro de barras por linea (fila o vertical) de la columna seleccionada.</summary>
         private readonly List<(bool horizontal, int index, TextBox count, ComboBox fill)> _lineRows = new List<(bool, int, TextBox, ComboBox)>();
         private static readonly string[] FillModes = { "auto", "left", "right", "center" };
         private static readonly string[] FillLabels = { "huecos mas grandes", "hacia la izquierda", "hacia la derecha", "simetrico" };
+        private static readonly string[] FillLabelsV = { "huecos mas grandes", "hacia abajo", "hacia arriba", "simetrico" };
+        private static readonly string[] FillLabelsAll = { "huecos mas grandes", "hacia la izquierda (abajo en verticales)", "hacia la derecha (arriba en verticales)", "simetrico" };
         private HostAnalysis _linesFor;
         private int _linesRowCount, _linesColCount;
         private bool _refreshingLines;
@@ -219,24 +221,12 @@ namespace ColumnRebar
             AddRow(grid, r++, "Barras intermedias:", _longTypeInter,
                    "Tipo de barra de las intermedias (las que van entre las obligadas a lo largo de cada lado). Puede ser otro diametro.");
 
-            var cntRow = new StackPanel { Orientation = Orientation.Horizontal };
-            _cntRow = CountBox(_cfg.Longitudinal.RowCount);
-            _cntCol = CountBox(_cfg.Longitudinal.ColCount);
-            cntRow.Children.Add(new TextBlock { Text = "por fila", Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
-            cntRow.Children.Add(_cntRow);
-            cntRow.Children.Add(new TextBlock { Text = "por vertical", Margin = new Thickness(12, 2, 4, 2), VerticalAlignment = VerticalAlignment.Center });
-            cntRow.Children.Add(_cntCol);
-            AddRow(grid, r++, "Barras minimas por linea:", cntRow,
-                   "Minimo para todas las columnas. Las barras se cuentan por lineas: filas (los lados horizontales de los estribos, " +
-                   "de arriba abajo: F1, F2...) y verticales (los lados verticales, de izquierda a derecha: V1, V2...). Una seccion " +
-                   "rectangular tiene 2 filas y 2 verticales; una L, 3 y 3. El total incluye las esquinas y los cruces de estribos. " +
-                   "Abajo se puede subir linea a linea para la columna seleccionada.");
-            Hook(_cntRow); Hook(_cntCol);
             _fillMode = FillCombo(_cfg.Longitudinal.FillMode, false);
             AddRow(grid, r++, "Reparto de las anadidas:", _fillMode,
-                   "Cuando otro estribo parte la linea (la esquina interior de una L, el alma de una T), donde van las barras que se anaden: " +
-                   "al hueco mas grande, al de la izquierda, al de la derecha, o simetrico (por pares izquierda-derecha). En las verticales, " +
-                   "izquierda = abajo y derecha = arriba. Cambiable linea a linea en el cuadro de abajo.");
+                   "Las barras se cuentan por lineas: filas (los lados horizontales de los estribos, de arriba abajo: F1, F2...) y " +
+                   "verticales (los lados verticales, de izquierda a derecha: V1, V2...). Cada linea arranca con sus barras obligadas " +
+                   "(esquinas y cruces de estribos) y en el cuadro de abajo se sube el total. Este reparto dice donde van las anadidas " +
+                   "cuando otro estribo parte la linea: al hueco mas grande, hacia un lado, o simetrico (por pares). Cambiable linea a linea.");
 
             _longBottom = NumBox(_cfg.Longitudinal.BottomExtensionMm);
             AddRow(grid, r++, "Prolongacion inferior (mm):", _longBottom,
@@ -270,11 +260,11 @@ namespace ColumnRebar
 
         private static TextBox CountBox(int v) => new TextBox { Text = v.ToString(CultureInfo.InvariantCulture), Width = 40, Margin = Pad };
 
-        private ComboBox FillCombo(string mode, bool withGeneral)
+        private ComboBox FillCombo(string mode, bool withGeneral, bool vertical = false)
         {
-            var cb = new ComboBox { Margin = Pad, Width = withGeneral ? 150 : 170, HorizontalAlignment = HorizontalAlignment.Left };
+            var cb = new ComboBox { Margin = Pad, Width = withGeneral ? 150 : 260, HorizontalAlignment = HorizontalAlignment.Left };
             if (withGeneral) cb.Items.Add("(general)");
-            foreach (string l in FillLabels) cb.Items.Add(l);
+            foreach (string l in withGeneral ? (vertical ? FillLabelsV : FillLabels) : FillLabelsAll) cb.Items.Add(l);
             int idx = Array.IndexOf(FillModes, (mode ?? "").Trim().ToLowerInvariant());
             cb.SelectedIndex = withGeneral ? (idx < 0 ? 0 : idx + 1) : Math.Max(0, idx);
             if (!withGeneral) Hook(cb);
@@ -309,7 +299,7 @@ namespace ColumnRebar
                     _linesGrid.RowDefinitions.Clear();
                     _linesGrid.ColumnDefinitions.Clear();
                     _linesCaption.Text = item == null || plan == null ? "Barras por linea: selecciona una columna armable en la lista"
-                        : "Barras por linea de " + item.Tag.Trim() + ": " + rows + " filas y " + cols + " verticales (el general es el minimo; aqui solo se sube)";
+                        : "Barras por linea de " + item.Tag.Trim() + ": " + rows + " filas y " + cols + " verticales (minimo: sus esquinas y cruces; aqui solo se sube)";
                     if (item == null || plan == null) return;
                     foreach (double w in new[] { 110, 60, 160, 70, 20, 110, 60, 160, 70 })
                         _linesGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
@@ -338,7 +328,7 @@ namespace ColumnRebar
                             Grid.SetRow(lb, row); Grid.SetColumn(lb, c0);
                             _linesGrid.Children.Add(lb);
                             TextBox count = CountBox(0);
-                            ComboBox fill = FillCombo("", true);
+                            ComboBox fill = FillCombo("", true, !horizontal);
                             Grid.SetRow(count, row); Grid.SetColumn(count, c0 + 1);
                             Grid.SetRow(fill, row); Grid.SetColumn(fill, c0 + 2);
                             _linesGrid.Children.Add(count);
@@ -347,6 +337,8 @@ namespace ColumnRebar
                             count.LostFocus += (sn, e) => Refresh();   // al salir se muestra el valor efectivo (nunca menor que el general)
                             fill.SelectionChanged += (sn, e) => { if (!_refreshingLines) { StoreLine(item, hz, idx, count, fill, ReadConfig(out _)); Refresh(); } };
                             var reset = new Button { Content = "general", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Volver al numero y reparto generales en esta linea" };
+                            reset.ToolTip = "Volver al minimo (esquinas y cruces) y al reparto general en esta linea";
+                            reset.Content = "minimo";
                             reset.Click += (sn, e) => { item.SetOwn(hz, idx, null); Refresh(); };
                             Grid.SetRow(reset, row); Grid.SetColumn(reset, c0 + 3);
                             _linesGrid.Children.Add(reset);
@@ -357,32 +349,32 @@ namespace ColumnRebar
                 if (item == null || plan == null) return;
                 foreach ((bool horizontal, int index, TextBox count, ComboBox fill) in _lineRows)
                 {
-                    int general = horizontal ? scratch.Longitudinal.RowCount : scratch.Longitudinal.ColCount;
+                    List<PlanLine> lines = horizontal ? plan.Rows : plan.Cols;
+                    if (index >= lines.Count) continue;
+                    PlanLine line = lines[index];
                     LineSpec own = item.Own(horizontal, index);
-                    int effective = own == null ? general : Math.Max(general, own.Count);
-                    bool isOwn = own != null && (own.Count > general || !string.IsNullOrEmpty(own.Fill));
+                    int effective = Math.Max(line.Fixed, own?.Count ?? 0);
+                    bool isOwn = own != null && (own.Count > line.Fixed || !string.IsNullOrEmpty(own.Fill));
                     if (!count.IsFocused) count.Text = effective.ToString(CultureInfo.InvariantCulture);
                     int fi = Array.IndexOf(FillModes, own?.Fill ?? "");
                     fill.SelectedIndex = fi < 0 ? 0 : fi + 1;
                     count.Background = isOwn ? Brushes.LightYellow : Brushes.White;
-                    List<PlanLine> lines = horizontal ? plan.Rows : plan.Cols;
-                    if (index < lines.Count && lines[index].Missing > 0)
+                    if (line.Missing > 0)
                     {
                         count.Background = Brushes.MistyRose;
-                        count.ToolTip = "No caben " + lines[index].Missing + " barra(s) mas en esta linea con 1.5 diametros libres";
+                        count.ToolTip = "No caben " + line.Missing + " barra(s) mas en esta linea con 1.5 diametros libres";
                     }
-                    else count.ToolTip = null;
+                    else count.ToolTip = "Minimo " + line.Fixed + " (esquinas y cruces de estribos); escribe mas para anadir intermedias";
                 }
             }
             finally { _refreshingLines = false; }
         }
 
-        /// <summary>Guarda la eleccion propia de una linea: nunca por debajo del numero general (que es el minimo).</summary>
+        /// <summary>Guarda la eleccion propia de una linea (el minimo real, sus obligadas, lo aplica el plan).</summary>
         private static void StoreLine(HostAnalysis item, bool horizontal, int index, TextBox count, ComboBox fill, AppConfig cfg)
         {
-            int general = horizontal ? cfg.Longitudinal.RowCount : cfg.Longitudinal.ColCount;
             LineSpec spec = item.Own(horizontal, index)?.Clone() ?? new LineSpec();
-            if (int.TryParse(count.Text.Trim(), out int n)) spec.Count = Math.Max(general, n);
+            if (int.TryParse(count.Text.Trim(), out int n)) spec.Count = Math.Max(0, n);
             spec.Fill = FillOf(fill, true);
             item.SetOwn(horizontal, index, spec);
         }
@@ -619,8 +611,6 @@ namespace ColumnRebar
 
             c.Longitudinal.BarTypeName = TypeOf(_longType);
             c.Longitudinal.IntermediateBarTypeName = _longTypeInter.SelectedIndex <= 0 ? "" : TypeOf(_longTypeInter);
-            c.Longitudinal.RowCount = ReadInt(_cntRow, "barras por fila", 2, errors);
-            c.Longitudinal.ColCount = ReadInt(_cntCol, "barras por vertical", 2, errors);
             c.Longitudinal.FillMode = FillOf(_fillMode, false);
             c.Longitudinal.BottomExtensionMm = ReadNum(_longBottom, "prolongacion inferior", 0, errors);
             c.Longitudinal.TopExtensionMm = ReadNum(_longTop, "prolongacion superior", 0, errors);

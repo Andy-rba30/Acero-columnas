@@ -55,23 +55,23 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
   plugin detecta en la sección: **filas** (los lados horizontales de los estribos,
   de arriba abajo: F1, F2...) y **verticales** (los lados verticales, de izquierda a
   derecha: V1, V2...). Una sección rectangular tiene 2 filas y 2 verticales; una L,
-  3 y 3; una T, 3 filas y 4 verticales. Cada línea lleva un **total de barras**
-  (obligadas incluidas). En la ventana hay un mínimo general por fila y por
-  vertical, y un cuadro con una entrada por línea de la columna seleccionada donde
-  solo se puede **subir**. Las que faltan se añaden en los huecos entre obligadas
+  3 y 3; una T, 3 filas y 4 verticales. Cada línea lleva un **total de barras**;
+  el mínimo son sus obligadas (el armado que cierra los estribos: F1 2, F2 3, F3 3
+  en una L típica) y en el cuadro de la columna seleccionada, con una entrada por
+  línea, solo se puede **subir**. Las que faltan se añaden en los huecos entre obligadas
   (sin cruzar nunca el vacío de una U), nunca a menos de 1.5 diámetros libres (si no
   caben, la casilla se pone en rojo y se avisa). Cuando otro estribo parte la línea
   (la esquina interior de una L), el **reparto** dice dónde van: al hueco más grande,
   hacia la izquierda, hacia la derecha o simétrico (por pares izquierda-derecha; en
-  las verticales izquierda es abajo). También se cambia línea a línea.
+  las verticales, hacia abajo o hacia arriba). También se cambia línea a línea.
 - **Grapas** (opcionales): una por cada par de intermedias enfrentadas de un mismo
   estribo, salvo donde ya pasa el lado de otro estribo. Se colocan en cada cota de
   estribo, con sus ganchos.
 
 Con recubrimiento 40 mm, estribo Ø3/8" y longitudinal Ø5/8", las secciones del plano
-de referencia salen como están dibujadas con el mínimo general 2/2 y subiendo la
-fila que toca: C-2 (150×250) con F1 = F2 = 3 da 6 barras; C-3 (L 250×450) con F1 = 4
-da 10 barras; C-1 y C-4 igual.
+de referencia salen como están dibujadas subiendo solo la fila que toca: C-2
+(150×250) con F1 = F2 = 3 da 6 barras; C-3 (L 250×450) con F1 = 4 da 10 barras;
+C-1 y C-4 igual.
 
 Las barras del mismo diámetro alineadas y equiespaciadas a lo largo de `u` se crean
 como un solo conjunto de Revit (array), igual que si se modelaran a mano.
@@ -137,9 +137,10 @@ lo que no.
   número de estribos, altura y, en rojo, el motivo del rechazo. Cada fila armable
   tiene su **distribución de estribos** y su **separación de longitudinales** propias
   (vacío = valor general). Clic en una fila para verla en los esquemas.
-- **Barras longitudinales**: tipo de las de esquina y de las intermedias, mínimo
-  por fila y por vertical, reparto, cuadro por línea de la columna seleccionada
-  (F1, F2..., V1, V2...), prolongaciones y patilla.
+- **Barras longitudinales**: tipo de las de esquina y de las intermedias, reparto
+  general, cuadro por línea de la columna seleccionada (F1, F2..., V1, V2..., cada
+  una con su total y su reparto; botón "mínimo" para volver a las obligadas),
+  prolongaciones y patilla.
 - **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases.
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
@@ -164,7 +165,7 @@ Armar avisa de qué falta.
 {
   "coverMm": 40,
   "longitudinal": { "barTypeName": "", "intermediateBarTypeName": "",
-                    "rowCount": 3, "colCount": 2, "fillMode": "auto",
+                    "fillMode": "auto",
                     "bottomExtensionMm": 0, "topExtensionMm": 0, "bottomLegMm": 0, "legDirection": "out" },
   "stirrups":     { "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left",
                     "distribution": "1@50, 5@100, R@250", "symmetric": true, "bottomOffsetMm": 0, "topOffsetMm": 0 },

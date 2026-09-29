@@ -98,7 +98,7 @@ namespace ColumnRebar
             var o = new PlanOptions
             {
                 Cover = Mm(cfg.CoverMm), Ds = dsFt, DbCorner = dbCornerFt, DbInter = dbInterFt,
-                RowCount = cfg.Longitudinal.RowCount, ColCount = cfg.Longitudinal.ColCount, Fill = cfg.Longitudinal.FillMode,
+                Fill = cfg.Longitudinal.FillMode,
                 Rows = item.RowOverrides, Cols = item.ColOverrides,
                 TiesU = cfg.Crossties.Enabled && cfg.TiesU, TiesV = cfg.Crossties.Enabled && cfg.TiesV, Dt = dtFt,
                 Tol = Mm(cfg.PrismCheckToleranceMm)

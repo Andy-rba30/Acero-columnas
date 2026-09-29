@@ -15,15 +15,10 @@ namespace ColumnRebar
         /// <summary>Tipo de barra de las intermedias. Vacio = el mismo que las de esquina.</summary>
         public string IntermediateBarTypeName { get; set; } = "";
         /// <summary>
-        /// Minimo general de barras por fila (los lados horizontales de los estribos, obligadas
-        /// incluidas). Cada columna puede subirlo fila a fila en la ventana.
-        /// </summary>
-        public int RowCount { get; set; } = 3;
-        /// <summary>Minimo general de barras por vertical (los lados verticales de los estribos, esquinas incluidas). 2 = solo esquinas.</summary>
-        public int ColCount { get; set; } = 2;
-        /// <summary>
         /// Donde van las barras anadidas cuando otro estribo parte la linea: "auto" (hueco mas
-        /// grande), "left", "right" o "center" (simetrico). Cambiable linea a linea en la ventana.
+        /// grande), "left" (izquierda; abajo en las verticales), "right" (derecha; arriba) o
+        /// "center" (simetrico). Cambiable linea a linea en la ventana. El numero de barras de
+        /// cada linea se decide en la ventana columna a columna: el minimo son sus esquinas y cruces.
         /// </summary>
         public string FillMode { get; set; } = "auto";
         /// <summary>Prolongacion de las barras por debajo de la base de la columna (mm, hacia la cimentacion o el piso inferior). 0 = empiezan en la base.</summary>
@@ -116,8 +111,6 @@ namespace ColumnRebar
             if (Longitudinal.BarTypeName == null) Longitudinal.BarTypeName = "";
             if (Longitudinal.IntermediateBarTypeName == null) Longitudinal.IntermediateBarTypeName = "";
             Longitudinal.LegDirection = Longitudinal.LegOutward ? "out" : "in";
-            if (Longitudinal.RowCount < 2) Longitudinal.RowCount = 2;
-            if (Longitudinal.ColCount < 2) Longitudinal.ColCount = 2;
             string fm = (Longitudinal.FillMode ?? "").Trim().ToLowerInvariant();
             Longitudinal.FillMode = fm == "left" || fm == "right" || fm == "center" ? fm : "auto";
             if (Stirrups.BarTypeName == null) Stirrups.BarTypeName = "";

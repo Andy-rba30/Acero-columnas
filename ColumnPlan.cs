@@ -37,7 +37,7 @@ namespace ColumnRebar
     /// <summary>Numero de barras y reparto de una linea (fila o vertical) elegidos para una columna.</summary>
     public sealed class LineSpec
     {
-        /// <summary>Total de barras en la linea (obligadas incluidas). 0 = el general.</summary>
+        /// <summary>Total de barras en la linea (obligadas incluidas). 0 o menos que las obligadas = solo las obligadas.</summary>
         public int Count;
         /// <summary>"auto", "left", "right", "center" o "" (el general).</summary>
         public string Fill = "";
@@ -56,6 +56,8 @@ namespace ColumnRebar
         public double Coord;
         /// <summary>Lados de estribo (estribo, lado) que apoyan barras en esta linea.</summary>
         public List<(int stirrup, int edge)> Edges = new List<(int, int)>();
+        /// <summary>Barras obligadas de la linea (esquinas y cruces de estribos): el minimo.</summary>
+        public int Fixed;
         /// <summary>Barras que han quedado en la linea (obligadas e intermedias).</summary>
         public int Bars;
         /// <summary>Barras que no se pudieron colocar por falta de sitio.</summary>
@@ -69,9 +71,7 @@ namespace ColumnRebar
         public double Cover;
         /// <summary>Diametro del estribo, de las barras de esquina y de las intermedias.</summary>
         public double Ds, DbCorner, DbInter;
-        /// <summary>Minimo general de barras por fila y por vertical (obligadas incluidas).</summary>
-        public int RowCount = 3, ColCount = 2;
-        /// <summary>Reparto general de las anadidas: "auto", "left", "right", "center".</summary>
+        /// <summary>Reparto general de las anadidas: "auto", "left" (abajo en verticales), "right" (arriba), "center".</summary>
         public string Fill = "auto";
         /// <summary>Elecciones por linea de esta columna (indice = fila de arriba abajo / vertical de izquierda a derecha); null = general.</summary>
         public IList<LineSpec> Rows, Cols;
@@ -79,12 +79,12 @@ namespace ColumnRebar
         public double Dt;
         public double Tol;
 
+        /// <summary>Total pedido para la linea (0 = solo las obligadas).</summary>
         public int CountFor(bool horizontal, int index)
         {
             IList<LineSpec> list = horizontal ? Rows : Cols;
-            int general = horizontal ? RowCount : ColCount;
             LineSpec own = list != null && index < list.Count ? list[index] : null;
-            return own == null ? general : Math.Max(general, own.Count);
+            return own == null ? 0 : own.Count;
         }
 
         public string FillFor(bool horizontal, int index)
@@ -295,7 +295,8 @@ namespace ColumnRebar
                     }
                 }
 
-                int want = o.CountFor(line.Horizontal, line.Index);
+                line.Fixed = fixedBars.Count;
+                int want = Math.Max(fixedBars.Count, o.CountFor(line.Horizontal, line.Index));
                 int count = want - fixedBars.Count;
                 List<(int gap, double pos)> added = FillByCount(gaps.Select(g => (g.a, g.b)).ToList(), count, minSp,
                                                                 o.FillFor(line.Horizontal, line.Index), out int missing);
