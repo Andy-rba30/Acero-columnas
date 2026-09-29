@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
 
@@ -22,6 +23,15 @@ namespace ColumnRebar
         public string DistributionOverride = "";
         /// <summary>Separacion maxima de longitudinales propia (0 = la de la configuracion).</summary>
         public double SpacingOverride = 0;
+        /// <summary>Modo por numero: barras de cada estribo de esta columna (indice = rectangulo; null = valores generales).</summary>
+        public List<BarCounts> Counts = new List<BarCounts>();
+
+        /// <summary>Barras del estribo dado: las propias si se editaron, si no las generales.</summary>
+        public BarCounts CountsFor(AppConfig cfg, int stirrup)
+        {
+            if (stirrup < Counts.Count && Counts[stirrup] != null) return Counts[stirrup];
+            return new BarCounts { Top = cfg.Longitudinal.TopCount, Bottom = cfg.Longitudinal.BottomCount, Side = cfg.Longitudinal.SideCount };
+        }
 
         public bool CanBuild => Error == null && Section != null;
 

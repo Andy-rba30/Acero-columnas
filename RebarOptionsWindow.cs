@@ -30,8 +30,15 @@ namespace ColumnRebar
         /// <summary>Configuracion final si el usuario pulso "Armar"; null si cancelo.</summary>
         public AppConfig Result { get; private set; }
 
-        private ComboBox _longType, _stType, _stHook, _stOrient, _tieType, _tieHook, _tieOrient, _tieDir;
-        private TextBox _longSpacing, _longBottom, _longTop, _longLeg;
+        private ComboBox _longType, _longTypeInter, _stType, _stHook, _stOrient, _tieType, _tieHook, _tieOrient, _tieDir;
+        private TextBox _longSpacing, _longBottom, _longTop, _longLeg, _cntTop, _cntBottom, _cntSide;
+        private RadioButton _modeSpacing, _modeCount;
+        private Grid _countsGrid;
+        private TextBlock _countsCaption;
+        /// <summary>Filas del cuadro de barras por estribo de la columna seleccionada.</summary>
+        private readonly List<(int stirrup, TextBox top, TextBox bottom, TextBox side)> _countRows = new List<(int, TextBox, TextBox, TextBox)>();
+        private HostAnalysis _countsFor;
+        private bool _refreshingCounts;
         private TextBox _stDist, _stBottomOff, _stTopOff, _cover, _partition;
         private CheckBox _stSym, _tieOn;
         private TextBlock _message, _partitionPreview, _previewCaption;
@@ -47,6 +54,7 @@ namespace ColumnRebar
         private bool _strictTypes;
 
         private const string NoHook = "(sin gancho)";
+        private const string SameAsCorner = "(igual que las de esquina)";
         private static readonly Thickness Pad = new Thickness(4, 2, 4, 2);
         private static readonly Brush SelectedBrush = new SolidColorBrush(Color.FromRgb(0xDC, 0xE8, 0xF6));
 
@@ -200,14 +208,48 @@ namespace ColumnRebar
         private UIElement BuildLongitudinal()
         {
             var group = new GroupBox { Header = "Barras longitudinales", Padding = new Thickness(4) };
+            var panel = new StackPanel();
             var grid = FormGrid();
             int r = 0;
             _longType = TypeCombo(_cfg.Longitudinal.BarTypeName);
-            AddRow(grid, r++, "Tipo de barra:", _longType, "Tipo de barra (RebarBarType) de las longitudinales.");
+            AddRow(grid, r++, "Barras de esquina:", _longType,
+                   "Tipo de barra de las barras obligadas: las de las esquinas de cada estribo y las de los cruces entre estribos.");
+            _longTypeInter = TypeCombo(_cfg.Longitudinal.IntermediateBarTypeName);
+            _longTypeInter.Items.Insert(0, SameAsCorner);
+            if (RebarGenerator.MatchName(_barTypes, _cfg.Longitudinal.IntermediateBarTypeName) == null) _longTypeInter.SelectedIndex = 0;
+            else _longTypeInter.SelectedIndex = _longTypeInter.SelectedIndex + 1;
+            AddRow(grid, r++, "Barras intermedias:", _longTypeInter,
+                   "Tipo de barra de las intermedias (las que van entre las obligadas a lo largo de cada lado). Puede ser otro diametro.");
+
+            var modeRow = new StackPanel { Orientation = Orientation.Horizontal };
+            _modeCount = new RadioButton { Content = "Por numero de barras", GroupName = "longmode", IsChecked = _cfg.Longitudinal.ByCount, Margin = Pad, VerticalAlignment = VerticalAlignment.Center };
+            _modeSpacing = new RadioButton { Content = "Por separacion maxima", GroupName = "longmode", IsChecked = !_cfg.Longitudinal.ByCount, Margin = new Thickness(14, 2, 4, 2), VerticalAlignment = VerticalAlignment.Center };
+            modeRow.Children.Add(_modeCount);
+            modeRow.Children.Add(_modeSpacing);
+            AddRow(grid, r++, "Intermedias:", modeRow,
+                   "Por numero: se escribe cuantas barras lleva cada lado de cada estribo (como en los planos). Por separacion: se anaden las " +
+                   "intermedias necesarias para no superar una separacion maxima. En los dos casos siempre hay barra en las esquinas de cada " +
+                   "estribo y en los cruces entre estribos, y las intermedias se reparten en los huecos mas grandes.");
+            Hook(_modeCount); Hook(_modeSpacing);
+
+            var cntRow = new StackPanel { Orientation = Orientation.Horizontal };
+            _cntTop = CountBox(_cfg.Longitudinal.TopCount);
+            _cntBottom = CountBox(_cfg.Longitudinal.BottomCount);
+            _cntSide = CountBox(_cfg.Longitudinal.SideCount);
+            cntRow.Children.Add(new TextBlock { Text = "arriba (total)", Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
+            cntRow.Children.Add(_cntTop);
+            cntRow.Children.Add(new TextBlock { Text = "abajo (total)", Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
+            cntRow.Children.Add(_cntBottom);
+            cntRow.Children.Add(new TextBlock { Text = "intermedias por costado", Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
+            cntRow.Children.Add(_cntSide);
+            AddRow(grid, r++, "Numero general por estribo:", cntRow,
+                   "Valores para todos los estribos de todas las columnas: barras en el lado superior y en el inferior (esquinas incluidas) " +
+                   "e intermedias en cada costado (sin contar las esquinas). Abajo se pueden cambiar estribo a estribo para la columna seleccionada.");
+            Hook(_cntTop); Hook(_cntBottom); Hook(_cntSide);
+
             _longSpacing = NumBox(_cfg.Longitudinal.MaxSpacingMm);
             AddRow(grid, r++, "Separacion maxima (mm):", _longSpacing,
-                   "Separacion maxima eje a eje entre longitudinales a lo largo de cada lado de cada estribo. Siempre hay barra en las " +
-                   "esquinas de cada estribo y donde un estribo cruza a otro; entre ellas se anaden las intermedias necesarias.");
+                   "Modo por separacion: separacion maxima eje a eje entre longitudinales a lo largo de cada lado de cada estribo.");
             _longBottom = NumBox(_cfg.Longitudinal.BottomExtensionMm);
             AddRow(grid, r++, "Prolongacion inferior (mm):", _longBottom,
                    "Cuanto sobresalen las barras por debajo de la base de la columna (anclaje en la cimentacion o en el piso inferior). 0 = empiezan en la base.");
@@ -216,9 +258,111 @@ namespace ColumnRebar
                    "Cuanto sobresalen por encima de la coronacion (empalme con el piso siguiente). 0 = terminan en la coronacion.");
             _longLeg = NumBox(_cfg.Longitudinal.BottomLegMm);
             AddRow(grid, r++, "Patilla inferior (mm):", _longLeg,
-                   "Patilla horizontal a 90 grados en el extremo inferior, hacia el centro de la seccion. Solo si hay prolongacion inferior. 0 = sin patilla.");
-            group.Content = grid;
+                   "Patilla horizontal a 90 grados en el extremo inferior, hacia el centro de la seccion. Necesita prolongacion inferior " +
+                   "mayor que 0 (la patilla queda por debajo de la base, dentro de la cimentacion). 0 = sin patilla.");
+            panel.Children.Add(grid);
+
+            // cuadro por estribo de la columna seleccionada (modo por numero)
+            _countsCaption = new TextBlock { Margin = new Thickness(4, 6, 4, 2), FontWeight = FontWeights.SemiBold };
+            panel.Children.Add(_countsCaption);
+            _countsGrid = new Grid { Margin = new Thickness(4, 0, 4, 2) };
+            panel.Children.Add(_countsGrid);
+            group.Content = panel;
             return group;
+        }
+
+        private static TextBox CountBox(int v) => new TextBox { Text = v.ToString(CultureInfo.InvariantCulture), Width = 40, Margin = Pad };
+
+        /// <summary>
+        /// Reconstruye (si cambia la columna o su numero de estribos) o actualiza el cuadro
+        /// "barras por estribo" de la columna seleccionada. Las casillas no editadas muestran
+        /// el valor general; al editar una, la columna guarda su propio valor para ese estribo.
+        /// </summary>
+        private void RefreshCounts(AppConfig scratch)
+        {
+            bool byCount = scratch.Longitudinal.ByCount;
+            _countsGrid.Visibility = byCount ? Visibility.Visible : Visibility.Collapsed;
+            _countsCaption.Visibility = byCount ? Visibility.Visible : Visibility.Collapsed;
+            _longSpacing.IsEnabled = !byCount;
+            foreach (TextBox tb in new[] { _cntTop, _cntBottom, _cntSide }) tb.IsEnabled = byCount;
+            if (!byCount) return;
+
+            HostAnalysis item = _selected != null && _selected.CanBuild ? _selected : null;
+            int stirrups = item?.Section.Rects.Count ?? 0;
+            bool rebuild = !ReferenceEquals(_countsFor, item) || _countRows.Count != stirrups;
+            _refreshingCounts = true;
+            try
+            {
+                if (rebuild)
+                {
+                    _countsFor = item;
+                    _countRows.Clear();
+                    _countsGrid.Children.Clear();
+                    _countsGrid.RowDefinitions.Clear();
+                    _countsGrid.ColumnDefinitions.Clear();
+                    _countsCaption.Text = item == null ? "Barras por estribo: selecciona una columna armable en la lista"
+                        : "Barras por estribo de " + item.Tag.Trim() + " (vacio = numero general)";
+                    if (item == null) return;
+                    foreach (double w in new[] { 70, 90, 90, 150, 90 })
+                        _countsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
+                    _countsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    string[] heads = { "Estribo", "arriba (total)", "abajo (total)", "intermedias por costado", "" };
+                    for (int c = 0; c < heads.Length; c++)
+                    {
+                        var h = new TextBlock { Text = heads[c], Foreground = Brushes.DimGray, Margin = Pad };
+                        Grid.SetRow(h, 0); Grid.SetColumn(h, c);
+                        _countsGrid.Children.Add(h);
+                    }
+                    for (int i = 0; i < stirrups; i++)
+                    {
+                        int row = i + 1, idx = i;
+                        _countsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                        Rect rc = item.Section.Rects[i];
+                        var lb = new TextBlock
+                        {
+                            Text = "E" + (i + 1), Foreground = SectionPreview.StirrupBrush(i), FontWeight = FontWeights.SemiBold, Margin = Pad,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            ToolTip = "Estribo " + (i + 1) + ": " + ColumnSection.ToMm(rc.W) + " x " + ColumnSection.ToMm(rc.H) + " mm"
+                        };
+                        Grid.SetRow(lb, row); Grid.SetColumn(lb, 0);
+                        _countsGrid.Children.Add(lb);
+                        TextBox top = CountBox(0), bottom = CountBox(0), side = CountBox(0);
+                        foreach ((TextBox tb, int col) in new[] { (top, 1), (bottom, 2), (side, 3) })
+                        {
+                            Grid.SetRow(tb, row); Grid.SetColumn(tb, col);
+                            _countsGrid.Children.Add(tb);
+                            tb.TextChanged += (sn, e) => { if (!_refreshingCounts) { StoreCounts(item, idx, top, bottom, side); Refresh(); } };
+                        }
+                        var reset = new Button { Content = "general", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Volver al numero general en este estribo" };
+                        reset.Click += (sn, e) => { while (item.Counts.Count <= idx) item.Counts.Add(null); item.Counts[idx] = null; Refresh(); };
+                        Grid.SetRow(reset, row); Grid.SetColumn(reset, 4);
+                        _countsGrid.Children.Add(reset);
+                        _countRows.Add((i, top, bottom, side));
+                    }
+                }
+                if (item == null) return;
+                foreach ((int stirrup, TextBox top, TextBox bottom, TextBox side) in _countRows)
+                {
+                    bool own = stirrup < item.Counts.Count && item.Counts[stirrup] != null;
+                    BarCounts n = item.CountsFor(scratch, stirrup);
+                    Brush bg = own ? Brushes.LightYellow : Brushes.White;
+                    if (!top.IsFocused) top.Text = n.Top.ToString(CultureInfo.InvariantCulture);
+                    if (!bottom.IsFocused) bottom.Text = n.Bottom.ToString(CultureInfo.InvariantCulture);
+                    if (!side.IsFocused) side.Text = n.Side.ToString(CultureInfo.InvariantCulture);
+                    top.Background = bg; bottom.Background = bg; side.Background = bg;
+                }
+            }
+            finally { _refreshingCounts = false; }
+        }
+
+        private static void StoreCounts(HostAnalysis item, int stirrup, TextBox top, TextBox bottom, TextBox side)
+        {
+            while (item.Counts.Count <= stirrup) item.Counts.Add(null);
+            BarCounts n = item.Counts[stirrup] ?? new BarCounts();
+            if (int.TryParse(top.Text.Trim(), out int t) && t >= 2) n.Top = t;
+            if (int.TryParse(bottom.Text.Trim(), out int b) && b >= 2) n.Bottom = b;
+            if (int.TryParse(side.Text.Trim(), out int sd) && sd >= 0) n.Side = sd;
+            item.Counts[stirrup] = n;
         }
 
         private UIElement BuildStirrups()
@@ -302,7 +446,7 @@ namespace ColumnRebar
             LegendItem(legend, SectionPreview.IntermediateBrush, "barra intermedia");
             LegendItem(legend, SectionPreview.StirrupBrush(0), "estribo 1");
             LegendItem(legend, SectionPreview.StirrupBrush(1), "estribo 2...");
-            LegendItem(legend, SectionPreview.TieBrush, "grapa");
+            LegendItem(legend, SectionPreview.TieBrush, "grapa (con sus ganchos)");
             DockPanel.SetDock(legend, Dock.Bottom);
             secPanel.Children.Add(legend);
             _preview = new SectionPreview { MinHeight = 200 };
@@ -443,6 +587,11 @@ namespace ColumnRebar
             AppConfig c = _cfg.Clone();
 
             c.Longitudinal.BarTypeName = TypeOf(_longType);
+            c.Longitudinal.IntermediateBarTypeName = _longTypeInter.SelectedIndex <= 0 ? "" : TypeOf(_longTypeInter);
+            c.Longitudinal.Mode = _modeCount.IsChecked == true ? "count" : "spacing";
+            c.Longitudinal.TopCount = ReadInt(_cntTop, "barras arriba", 2, errors);
+            c.Longitudinal.BottomCount = ReadInt(_cntBottom, "barras abajo", 2, errors);
+            c.Longitudinal.SideCount = ReadInt(_cntSide, "intermedias por costado", 0, errors);
             c.Longitudinal.MaxSpacingMm = ReadNum(_longSpacing, "separacion maxima", 1, errors);
             c.Longitudinal.BottomExtensionMm = ReadNum(_longBottom, "prolongacion inferior", 0, errors);
             c.Longitudinal.TopExtensionMm = ReadNum(_longTop, "prolongacion superior", 0, errors);
@@ -469,6 +618,18 @@ namespace ColumnRebar
 
             error = errors.Count == 0 ? null : string.Join(" | ", errors);
             return c;
+        }
+
+        private static int ReadInt(TextBox tb, string label, int min, List<string> errors)
+        {
+            if (!int.TryParse(tb.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v < min)
+            {
+                errors.Add(label + ": entero no valido (minimo " + min + ")");
+                tb.BorderBrush = Brushes.Firebrick;
+                return min;
+            }
+            tb.ClearValue(Control.BorderBrushProperty);
+            return v;
         }
 
         private static double ReadNum(TextBox tb, string label, double min, List<string> errors)
@@ -517,16 +678,19 @@ namespace ColumnRebar
             foreach (FrameworkElement fe in new FrameworkElement[] { _tieType, _tieHook, _tieOrient, _tieDir }) fe.IsEnabled = tiesEnabled;
 
             double db = DiameterFt(scratch.Longitudinal.BarTypeName);
+            double dbi = string.IsNullOrEmpty(scratch.Longitudinal.IntermediateBarTypeName) ? db : DiameterFt(scratch.Longitudinal.IntermediateBarTypeName);
             double ds = DiameterFt(scratch.Stirrups.BarTypeName);
             double dt = tiesEnabled ? DiameterFt(scratch.Crossties.BarTypeName) : 0;
             // sin tipo elegido, se dibuja con un diametro orientativo para poder ver el esquema
             double dbDraw = db > 0 ? db : ColumnSection.Mm(16), dsDraw = ds > 0 ? ds : ColumnSection.Mm(8), dtDraw = dt > 0 ? dt : dsDraw;
+            double dbiDraw = dbi > 0 ? dbi : dbDraw;
+            RefreshCounts(scratch);
 
             // estado de cada columna con esta configuracion
             int ok = 0;
             foreach (HostAnalysis item in _items)
             {
-                bool good = ItemStatus(item, scratch, dbDraw, dsDraw, dtDraw, out string text, out _, out _);
+                bool good = ItemStatus(item, scratch, dbDraw, dbiDraw, dsDraw, dtDraw, out string text, out _, out _);
                 if (good) ok++;
                 if (_itemRuns.TryGetValue(item, out var runs))
                 {
@@ -540,10 +704,12 @@ namespace ColumnRebar
             // esquema del elemento seleccionado
             if (_selected != null && _selected.CanBuild)
             {
-                ItemStatus(_selected, scratch, dbDraw, dsDraw, dtDraw, out string text, out ColumnPlan plan, out List<StirrupRun> runs);
+                ItemStatus(_selected, scratch, dbDraw, dbiDraw, dsDraw, dtDraw, out string text, out ColumnPlan plan, out List<StirrupRun> runs);
                 _previewCaption.Text = _selected.Tag + _selected.Section.Describe() +
                                        (db <= 0 || ds <= 0 ? "  (sin tipo de barra elegido: diametros orientativos)" : "");
-                if (plan != null) _preview.Show(_selected.Section, plan); else _preview.Clear(text);
+                bool hooks = !string.IsNullOrEmpty(scratch.Stirrups.HookTypeName);
+                bool tieHooks = tiesEnabled && !string.IsNullOrEmpty(scratch.Crossties.HookTypeName);
+                if (plan != null) _preview.Show(_selected.Section, plan, hooks, tieHooks); else _preview.Clear(text);
                 if (runs != null) _elevation.Show(_selected.Section, plan, runs, scratch); else _elevation.Clear(text);
                 _partitionPreview.Text = "Ejemplo: " + _selected.Partition(scratch, "estribo", "1");
             }
@@ -560,14 +726,14 @@ namespace ColumnRebar
         }
 
         /// <summary>Estado de una columna con la configuracion dada: true si se puede armar, y el texto para su fila.</summary>
-        private static bool ItemStatus(HostAnalysis item, AppConfig cfg, double db, double ds, double dt,
+        private static bool ItemStatus(HostAnalysis item, AppConfig cfg, double db, double dbi, double ds, double dt,
                                        out string text, out ColumnPlan plan, out List<StirrupRun> runs)
         {
             plan = null; runs = null;
             if (!item.CanBuild) { text = item.Error; return false; }
             try
             {
-                plan = RebarGenerator.PlanFor(item, cfg, db, ds, dt);
+                plan = RebarGenerator.PlanFor(item, cfg, db, dbi, ds, dt);
                 if (plan.Error != null) { text = item.Section.Describe() + " -> SIN ARMAR: " + plan.Error; return false; }
                 runs = RebarGenerator.RunsFor(item, cfg, out string warn);
                 int n = runs.Sum(r => r.Count);

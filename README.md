@@ -47,24 +47,33 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
 
 - Cada estribo va a `coverMm` de las caras de la columna (medido al exterior del
   estribo).
-- Hay **barra longitudinal obligada** en cada esquina de cada estribo y en cada punto
-  en que un lado de un estribo **cruza** un lado de otro (la barra queda apoyada en
-  los dos, como en la esquina interior de una L).
-- A lo largo de cada lado, entre dos barras obligadas, se añaden las **intermedias**
-  necesarias para no superar `maxSpacingMm` (eje a eje), repartidas por igual. Las de
-  dos lados enfrentados del mismo estribo se colocan a la misma cota, para poder
-  atarlas con grapas.
+- Hay **barra obligada** en cada esquina de cada estribo y en cada punto en que un
+  lado de un estribo **cruza** un lado de otro (la barra queda apoyada en los dos,
+  como en la esquina interior de una L). Llevan el tipo de barra **de esquina**.
+- Las **intermedias** van a lo largo de cada lado, entre las obligadas, con su propio
+  tipo de barra (puede ser otro diámetro, por ejemplo esquinas Ø3/4" e intermedias
+  Ø5/8"). Se reparten de dos formas:
+  - **Por número** (por defecto, como en los planos): para cada estribo se escribe el
+    total de barras del lado superior, el del inferior (esquinas incluidas) y las
+    intermedias de cada costado. Valores generales en la ventana, y **estribo a
+    estribo para cada columna** en el cuadro de la columna seleccionada. Las
+    intermedias se colocan siempre en los huecos más grandes entre las obligadas, así
+    quedan lo más uniformes posible sin mover las esquinas ni los cruces.
+  - **Por separación máxima**: se añaden las necesarias para no superar
+    `maxSpacingMm` (eje a eje). Las de dos lados enfrentados se colocan a la misma
+    cota para poder atarlas con grapas.
 - **Grapas** (opcionales): una por cada par de intermedias enfrentadas de un mismo
   estribo, salvo donde ya pasa el lado de otro estribo. Se colocan en cada cota de
   estribo, con sus ganchos.
 
-Con recubrimiento 40 mm, estribo Ø3/8" y longitudinal Ø5/8", separación 150 mm, las
-secciones del plano de referencia salen exactamente como están dibujadas: C-1 (L
-250×400) 8 barras, C-2 (150×250) 6 barras, C-3 (L 250×450) 10 barras y C-4 (L
-250×800) 14 barras, cada L con sus dos estribos.
+Con recubrimiento 40 mm, estribo Ø3/8" y longitudinal Ø5/8", el modo por separación a
+150 mm reproduce las secciones del plano de referencia tal como están dibujadas: C-1
+(L 250×400) 8 barras, C-2 (150×250) 6 barras, C-3 (L 250×450) 10 barras y C-4 (L
+250×800) 14 barras, cada L con sus dos estribos. En modo por número, C-3 sale igual con
+E1 4/4/1 y E2 2/2/1.
 
-Las barras longitudinales alineadas y equiespaciadas a lo largo de `u` se crean como
-un solo conjunto de Revit (array), igual que si se modelaran a mano.
+Las barras del mismo diámetro alineadas y equiespaciadas a lo largo de `u` se crean
+como un solo conjunto de Revit (array), igual que si se modelaran a mano.
 
 ## Distribución de estribos en altura (`StirrupLayout`)
 
@@ -90,8 +99,10 @@ si el elemento la incluye).
   **superior** sobresalen esa longitud (anclaje en la cimentación, empalme con el piso
   siguiente). Esas prolongaciones son las únicas partes de barra que pueden estar
   fuera del hormigón de la columna: el resto se comprueba.
-- Con **patilla inferior** (y prolongación inferior) llevan una pata horizontal a 90°
-  hacia el centro de la sección.
+- Con **patilla inferior** llevan una pata horizontal a 90° hacia el centro de la
+  sección. Necesita prolongación inferior mayor que 0: la patilla queda por debajo
+  de la base, dentro de la cimentación (si no, quedaría dentro del hormigón de la
+  columna a ras de la base y se rechazaría). El alzado la dibuja a trazos.
 
 ## Ganchos
 
@@ -124,14 +135,17 @@ lo que no.
   número de estribos, altura y, en rojo, el motivo del rechazo. Cada fila armable
   tiene su **distribución de estribos** y su **separación de longitudinales** propias
   (vacío = valor general). Clic en una fila para verla en los esquemas.
-- **Barras longitudinales**: tipo, separación máxima, prolongaciones y patilla.
+- **Barras longitudinales**: tipo de las de esquina y de las intermedias, modo por
+  número (general y cuadro por estribo de la columna seleccionada) o por separación,
+  prolongaciones y patilla.
 - **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases.
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
   Partición (`{marca}`, `{id}`, `{tipo}`, `{familia}`, `{conjunto}`, `{estribo}`).
-- **Sección**: hormigón, cada estribo con su color, grapas y cada barra (rojo oscuro
-  las obligadas, naranja las intermedias). Rueda: zoom; arrastrar: mover; doble clic:
-  encajar. Al pasar el ratón por una barra o estribo se ve su posición.
+- **Sección**: hormigón, cada estribo con su color y sus ganchos a 135° (esquema),
+  grapas con sus ganchos y cada barra a su diámetro (rojo oscuro las obligadas,
+  naranja las intermedias). Rueda: zoom; arrastrar: mover; doble clic: encajar. Al
+  pasar el ratón por una barra o estribo se ve su posición y diámetro.
 - **Alzado**: la columna con las longitudinales (prolongaciones a trazos) y cada
   estribo, con la etiqueta de cada tramo (`inf 1@50`, `resto R@250 (=238)`).
 - **Guardar como valores por defecto** escribe `config.json`; **Armar** crea las
@@ -145,7 +159,9 @@ Armar avisa de qué falta.
 ```jsonc
 {
   "coverMm": 40,
-  "longitudinal": { "barTypeName": "", "maxSpacingMm": 150, "bottomExtensionMm": 0, "topExtensionMm": 0, "bottomLegMm": 0 },
+  "longitudinal": { "barTypeName": "", "intermediateBarTypeName": "", "mode": "count",
+                    "topCount": 3, "bottomCount": 3, "sideCount": 1, "maxSpacingMm": 150,
+                    "bottomExtensionMm": 0, "topExtensionMm": 0, "bottomLegMm": 0 },
   "stirrups":     { "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left",
                     "distribution": "1@50, 5@100, R@250", "symmetric": true, "bottomOffsetMm": 0, "topOffsetMm": 0 },
   "crossties":    { "enabled": false, "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left", "directions": "both" },

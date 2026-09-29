@@ -20,6 +20,7 @@ namespace ColumnRebar
     {
         private ColumnSection _s;
         private ColumnPlan _plan;
+        private bool _hooks, _tieHooks;
         private string _message = "Sin elemento armable";
 
         private double _zoom = 1;
@@ -59,10 +60,12 @@ namespace ColumnRebar
             Cursor = Cursors.Hand;
         }
 
-        public void Show(ColumnSection s, ColumnPlan plan)
+        /// <param name="hooks">Dibujar los ganchos a 135 grados de los estribos (esquema).</param>
+        /// <param name="tieHooks">Dibujar los ganchos de las grapas.</param>
+        public void Show(ColumnSection s, ColumnPlan plan, bool hooks, bool tieHooks)
         {
             bool changed = !ReferenceEquals(_s, s);
-            _s = s; _plan = plan;
+            _s = s; _plan = plan; _hooks = hooks; _tieHooks = tieHooks;
             if (changed) ResetView(); else Redraw();
         }
 
@@ -166,6 +169,19 @@ namespace ColumnRebar
                 r.ToolTip = "Estribo " + (st.Index + 1) + ": " + Mm(st.Concrete.W) + " x " + Mm(st.Concrete.H) + " mm";
                 Children.Add(r);
                 Text("E" + (st.Index + 1), X(st.Line.CU) - 8, Y(st.Line.V2) - 16 + st.Index * 12, b, 11, true);
+
+                // ganchos a 135 grados en la esquina superior izquierda (donde empieza y acaba el estribo):
+                // cada extremo sigue su lado, dobla hacia el interior y acaba a 45 grados hacia el nucleo
+                if (_hooks)
+                {
+                    double hook = Math.Max(6 * _plan.Ds, 75 / FtToMm);   // longitud de la pata (6 diametros, minimo 75 mm)
+                    double gap = 1.2 * _plan.Ds;                          // las dos patas van una junto a otra
+                    Pt c = new Pt(st.Line.U1, st.Line.V2);
+                    // extremo que llega por el lado superior: dobla hacia abajo-derecha
+                    Hook(X, Y, new Pt(c.U + gap, c.V), new Pt(c.U + gap + hook * 0.7071, c.V - hook * 0.7071), b, th);
+                    // extremo que llega por el lado izquierdo: dobla hacia abajo-derecha, un poco mas abajo
+                    Hook(X, Y, new Pt(c.U, c.V - gap), new Pt(c.U + hook * 0.7071, c.V - gap - hook * 0.7071), b, th);
+                }
             }
 
             // grapas
@@ -178,25 +194,52 @@ namespace ColumnRebar
                     ToolTip = "Grapa (estribo " + (t.Stirrup + 1) + ")"
                 };
                 Children.Add(ln);
+                if (_tieHooks)
+                {
+                    // gancho a 135 grados en cada extremo: vuelve hacia dentro a 45 grados
+                    double hook = Math.Max(6 * _plan.Dt, 75 / FtToMm) * 0.7071;
+                    double du = t.B.U - t.A.U, dv = t.B.V - t.A.V;
+                    double len = Math.Sqrt(du * du + dv * dv);
+                    if (len > 1e-9)
+                    {
+                        du /= len; dv /= len;
+                        // perpendicular hacia el centro del estribo
+                        PlanStirrup st = _plan.Stirrups[t.Stirrup];
+                        double pu = -dv, pv = du;
+                        double mu = 0.5 * (t.A.U + t.B.U), mv = 0.5 * (t.A.V + t.B.V);
+                        if ((st.Line.CU - mu) * pu + (st.Line.CV - mv) * pv < 0) { pu = -pu; pv = -pv; }
+                        Hook(X, Y, t.A, new Pt(t.A.U + (du + pu) * hook, t.A.V + (dv + pv) * hook), TieBrush, Math.Max(1.2, _plan.Dt * k));
+                        Hook(X, Y, t.B, new Pt(t.B.U + (-du + pu) * hook, t.B.V + (-dv + pv) * hook), TieBrush, Math.Max(1.2, _plan.Dt * k));
+                    }
+                }
             }
 
-            // barras
-            double rr = Math.Max(2.5, 0.5 * _plan.Db * k);
+            // barras (cada una con su diametro)
             foreach (PlanBar bar in _plan.Bars)
             {
+                double rr = Math.Max(2.5, 0.5 * _plan.DiameterOf(bar) * k);
                 var e = new Ellipse
                 {
                     Width = 2 * rr, Height = 2 * rr,
                     Fill = bar.Required ? RequiredBrush : IntermediateBrush, Stroke = Brushes.Black, StrokeThickness = 0.6,
-                    ToolTip = (bar.Required ? "Barra de esquina o cruce" : "Barra intermedia") + " en u=" + Mm(bar.P.U) + ", v=" + Mm(bar.P.V) + " mm"
+                    ToolTip = (bar.Required ? "Barra de esquina o cruce" : "Barra intermedia") + " (" + Mm(_plan.DiameterOf(bar)) + " mm) en u=" + Mm(bar.P.U) + ", v=" + Mm(bar.P.V) + " mm"
                 };
                 SetLeft(e, X(bar.P.U) - rr); SetTop(e, Y(bar.P.V) - rr);
                 Children.Add(e);
             }
 
             // resumen
-            Text(_plan.Describe(), 8, H - 20, Brushes.DimGray, 11);
+            Text(_plan.Describe() + " | " + _plan.DescribeCounts() + " (arriba/abajo/intermedias por costado)", 8, H - 20, Brushes.DimGray, 11);
             if (_plan.Warnings.Count > 0) Text(string.Join(" | ", _plan.Warnings), 8, H - 36, Brushes.Firebrick, 11);
+        }
+
+        private void Hook(Func<double, double> X, Func<double, double> Y, Pt from, Pt to, Brush brush, double thickness)
+        {
+            Children.Add(new Line
+            {
+                X1 = X(from.U), Y1 = Y(from.V), X2 = X(to.U), Y2 = Y(to.V),
+                Stroke = brush, StrokeThickness = thickness, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round
+            });
         }
 
         private TextBlock Text(string s, double x, double y, Brush brush, double size, bool bold = false)

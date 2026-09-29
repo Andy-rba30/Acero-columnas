@@ -53,12 +53,13 @@ namespace ColumnRebar
 
             double ext0 = Math.Max(0, _cfg.Longitudinal.BottomExtensionMm) / FtToMm;
             double ext1 = Math.Max(0, _cfg.Longitudinal.TopExtensionMm) / FtToMm;
+            double leg = ext0 > 0 ? Math.Max(0, _cfg.Longitudinal.BottomLegMm) / FtToMm : 0;
             double total = _s.Height + ext0 + ext1;
             double margin = 24;
             double labelW = 150;
             double k = Math.Min((H - 2 * margin) / Math.Max(total, 1e-6), (W - labelW - 2 * margin) / Math.Max(_s.Width, 1e-6) * 3);
             double colW = Math.Max(20, Math.Min(_s.Width * k, W - labelW - 2 * margin));
-            double x0 = margin + 20;
+            double x0 = margin + 60;
             double yBase = H - margin - ext0 * k;   // cota de la base
             Func<double, double> Y = z => yBase - z * k;
 
@@ -70,8 +71,8 @@ namespace ColumnRebar
             };
             SetLeft(col, x0); SetTop(col, Y(_s.Height));
             Children.Add(col);
-            Text("base", x0 - 32, Y(0) - 7, Brushes.DimGray, 10);
-            Text((_s.Height * 0.3048).ToString("0.00", CultureInfo.InvariantCulture) + " m", x0 - 40, Y(_s.Height) - 7, Brushes.DimGray, 10);
+            Text("base", x0 - 30, Y(0) - 7, Brushes.DimGray, 10);
+            Text((_s.Height * 0.3048).ToString("0.00", CultureInfo.InvariantCulture) + " m", x0 - 38, Y(_s.Height) - 7, Brushes.DimGray, 10);
 
             // longitudinales: la primera y la ultima barra en u
             if (_plan != null && _plan.Error == null && _plan.Bars.Count > 0)
@@ -81,14 +82,22 @@ namespace ColumnRebar
                 foreach (double u in new[] { uMin, uMax })
                 {
                     double x = x0 + u * scale;
+                    // patilla a 90 grados en la base, hacia el centro de la seccion
+                    if (leg > 0)
+                    {
+                        double dir = u < 0.5 * _s.Width ? 1 : -1;
+                        Children.Add(new Line { X1 = x, Y1 = Y(-ext0), X2 = x + dir * leg * scale, Y2 = Y(-ext0), Stroke = SectionPreview.RequiredBrush, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 3, 2 } });
+                    }
                     Children.Add(new Line { X1 = x, Y1 = Y(0), X2 = x, Y2 = Y(_s.Height), Stroke = SectionPreview.RequiredBrush, StrokeThickness = 2 });
                     if (ext0 > 0)
                         Children.Add(new Line { X1 = x, Y1 = Y(0), X2 = x, Y2 = Y(-ext0), Stroke = SectionPreview.RequiredBrush, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 3, 2 } });
                     if (ext1 > 0)
                         Children.Add(new Line { X1 = x, Y1 = Y(_s.Height), X2 = x, Y2 = Y(_s.Height + ext1), Stroke = SectionPreview.RequiredBrush, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 3, 2 } });
                 }
-                if (ext0 > 0) Text("-" + Mm(ext0) + " mm", x0 + colW + 4, Y(-ext0) - 6, SectionPreview.RequiredBrush, 10);
-                if (ext1 > 0) Text("+" + Mm(ext1) + " mm", x0 + colW + 4, Y(_s.Height + ext1) - 6, SectionPreview.RequiredBrush, 10);
+                if (ext0 > 0) Text("-" + Mm(ext0) + " mm" + (leg > 0 ? " + patilla " + Mm(leg) : ""), x0 - 58, Y(-ext0) - 14, SectionPreview.RequiredBrush, 10);
+                if (ext1 > 0) Text("+" + Mm(ext1) + " mm", x0 - 58, Y(_s.Height + ext1) - 2, SectionPreview.RequiredBrush, 10);
+                if (_cfg.Longitudinal.BottomLegMm > 0 && ext0 <= 0)
+                    Text("patilla ignorada: sin prolongacion inferior", x0 - 58, H - 34, Brushes.Firebrick, 10);
             }
 
             // estribos

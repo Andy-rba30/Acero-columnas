@@ -10,14 +10,30 @@ namespace ColumnRebar
     /// <summary>Barras longitudinales de la columna.</summary>
     public class LongitudinalCfg
     {
-        /// <summary>Nombre del RebarBarType cargado en el proyecto (exacto, o un fragmento que lo identifique).</summary>
+        /// <summary>Tipo de barra (RebarBarType) de las barras de esquina y de cruce de estribos: exacto, o un fragmento que lo identifique.</summary>
         public string BarTypeName { get; set; } = "";
+        /// <summary>Tipo de barra de las intermedias. Vacio = el mismo que las de esquina.</summary>
+        public string IntermediateBarTypeName { get; set; } = "";
         /// <summary>
-        /// Separacion maxima entre barras (eje a eje, mm) a lo largo de cada lado de cada
-        /// estribo. Entre dos barras obligadas (esquinas de estribos y cruces de estribos)
-        /// se anaden las intermedias necesarias para no superarla.
+        /// Como se reparten las intermedias: "spacing" = por separacion maxima (MaxSpacingMm);
+        /// "count" = por numero de barras (TopCount / BottomCount / SideCount por estribo, editable
+        /// por columna y por estribo en la ventana).
+        /// </summary>
+        public string Mode { get; set; } = "count";
+        /// <summary>
+        /// Modo por separacion: separacion maxima entre barras (eje a eje, mm) a lo largo de cada
+        /// lado de cada estribo. Entre dos barras obligadas (esquinas de estribos y cruces de
+        /// estribos) se anaden las intermedias necesarias para no superarla.
         /// </summary>
         public double MaxSpacingMm { get; set; } = 150;
+        /// <summary>Modo por numero: total de barras en el lado superior de cada estribo (esquinas incluidas).</summary>
+        public int TopCount { get; set; } = 3;
+        /// <summary>Modo por numero: total de barras en el lado inferior de cada estribo (esquinas incluidas).</summary>
+        public int BottomCount { get; set; } = 3;
+        /// <summary>Modo por numero: intermedias en cada costado de cada estribo (sin contar las esquinas).</summary>
+        public int SideCount { get; set; } = 1;
+        [JsonIgnore]
+        public bool ByCount => !string.Equals((Mode ?? "").Trim(), "spacing", StringComparison.OrdinalIgnoreCase);
         /// <summary>Prolongacion de las barras por debajo de la base de la columna (mm, hacia la cimentacion o el piso inferior). 0 = empiezan en la base.</summary>
         public double BottomExtensionMm { get; set; } = 0;
         /// <summary>Prolongacion por encima de la coronacion (mm, empalme con el piso siguiente). 0 = terminan en la coronacion.</summary>
@@ -102,6 +118,11 @@ namespace ColumnRebar
             if (Stirrups == null) Stirrups = new StirrupCfg();
             if (Crossties == null) Crossties = new CrosstieCfg();
             if (Longitudinal.BarTypeName == null) Longitudinal.BarTypeName = "";
+            if (Longitudinal.IntermediateBarTypeName == null) Longitudinal.IntermediateBarTypeName = "";
+            Longitudinal.Mode = Longitudinal.ByCount ? "count" : "spacing";
+            if (Longitudinal.TopCount < 2) Longitudinal.TopCount = 2;
+            if (Longitudinal.BottomCount < 2) Longitudinal.BottomCount = 2;
+            if (Longitudinal.SideCount < 0) Longitudinal.SideCount = 0;
             if (Stirrups.BarTypeName == null) Stirrups.BarTypeName = "";
             if (Stirrups.HookTypeName == null) Stirrups.HookTypeName = "";
             if (Crossties.BarTypeName == null) Crossties.BarTypeName = "";

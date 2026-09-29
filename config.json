@@ -3,6 +3,11 @@
 
   "longitudinal": {
     "barTypeName": "",
+    "intermediateBarTypeName": "",
+    "mode": "count",
+    "topCount": 3,
+    "bottomCount": 3,
+    "sideCount": 1,
     "maxSpacingMm": 150,
     "bottomExtensionMm": 0,
     "topExtensionMm": 0,

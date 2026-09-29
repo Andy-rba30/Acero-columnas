@@ -66,13 +66,15 @@ namespace ColumnRebar
                 StirrupHookLeft = cfg.HookLeft, TieHookLeft = cfg.TieHookLeft
             };
 
-            RebarBarType btLong = FindBarType(doc, cfg.Longitudinal.BarTypeName, "longitudinales");
+            RebarBarType btLong = FindBarType(doc, cfg.Longitudinal.BarTypeName, "longitudinales de esquina");
+            RebarBarType btInter = string.IsNullOrWhiteSpace(cfg.Longitudinal.IntermediateBarTypeName)
+                ? btLong : FindBarType(doc, cfg.Longitudinal.IntermediateBarTypeName, "longitudinales intermedias");
             RebarBarType btStirrup = FindBarType(doc, cfg.Stirrups.BarTypeName, "estribos");
             RebarBarType btTie = cfg.Crossties.Enabled ? FindBarType(doc, cfg.Crossties.BarTypeName, "grapas") : null;
             c.StirrupHook = FindHookType(doc, cfg.Stirrups.HookTypeName);
             c.TieHook = cfg.Crossties.Enabled ? FindHookType(doc, cfg.Crossties.HookTypeName) : ElementId.InvalidElementId;
 
-            c.Plan = PlanFor(item, cfg, btLong.BarNominalDiameter, btStirrup.BarNominalDiameter,
+            c.Plan = PlanFor(item, cfg, btLong.BarNominalDiameter, btInter.BarNominalDiameter, btStirrup.BarNominalDiameter,
                              btTie?.BarNominalDiameter ?? 0);
             if (c.Plan.Error != null) throw new InvalidOperationException(c.Plan.Error);
             c.Result.Warnings.AddRange(c.Plan.Warnings);
@@ -81,7 +83,7 @@ namespace ColumnRebar
             if (warn != null) c.Result.Warnings.Add(warn);
             if (c.Runs.Count == 0) throw new InvalidOperationException("la distribucion de estribos no produce ningun estribo");
 
-            Longitudinals(c, btLong);
+            Longitudinals(c, btLong, btInter);
             if (!c.Result.Safe) return c.Result;
             Stirrups(c, btStirrup);
             if (!c.Result.Safe) return c.Result;
@@ -90,12 +92,19 @@ namespace ColumnRebar
         }
 
         /// <summary>Armado de la seccion con esta configuracion (lo mismo que dibuja la ventana).</summary>
-        public static ColumnPlan PlanFor(HostAnalysis item, AppConfig cfg, double dbFt, double dsFt, double dtFt)
+        public static ColumnPlan PlanFor(HostAnalysis item, AppConfig cfg, double dbCornerFt, double dbInterFt, double dsFt, double dtFt)
         {
             ColumnSection s = item.Section;
-            return ColumnPlan.Build(s.Polygon, s.Rects, Mm(cfg.CoverMm), dsFt, dbFt, Mm(item.MaxSpacingMm(cfg)),
-                                    cfg.Crossties.Enabled && cfg.TiesU, cfg.Crossties.Enabled && cfg.TiesV, dtFt,
-                                    Mm(cfg.PrismCheckToleranceMm));
+            var counts = new List<BarCounts>();
+            for (int i = 0; i < s.Rects.Count; i++) counts.Add(item.CountsFor(cfg, i));
+            var o = new PlanOptions
+            {
+                Cover = Mm(cfg.CoverMm), Ds = dsFt, DbCorner = dbCornerFt, DbInter = dbInterFt,
+                ByCount = cfg.Longitudinal.ByCount, MaxSpacing = Mm(item.MaxSpacingMm(cfg)), Counts = counts,
+                TiesU = cfg.Crossties.Enabled && cfg.TiesU, TiesV = cfg.Crossties.Enabled && cfg.TiesV, Dt = dtFt,
+                Tol = Mm(cfg.PrismCheckToleranceMm)
+            };
+            return ColumnPlan.Build(s.Polygon, s.Rects, o);
         }
 
         /// <summary>Tramos de estribos de esta columna con esta configuracion. Lanza si la distribucion no se entiende.</summary>
@@ -110,7 +119,7 @@ namespace ColumnRebar
         // -----------------------------------------------------------------
         // Longitudinales: una fila equiespaciada = un conjunto con array a lo largo de u
         // -----------------------------------------------------------------
-        private static void Longitudinals(Ctx c, RebarBarType bt)
+        private static void Longitudinals(Ctx c, RebarBarType btCorner, RebarBarType btInter)
         {
             ColumnSection s = c.S;
             LongitudinalCfg L = c.Cfg.Longitudinal;
@@ -122,8 +131,9 @@ namespace ColumnRebar
             if (zTop - zBot < MinSeg) { c.Result.Rejected.Add("longitudinales sin longitud"); return; }
             Pt centroid = Rectilinear.Centroid(s.Polygon);
 
-            foreach ((Pt first, int count, double step) in c.Plan.Rows(c.Tol))
+            foreach ((Pt first, int count, double step, bool required) in c.Plan.Rows(c.Tol))
             {
+                RebarBarType bt = required ? btCorner : btInter;
                 XYZ normal;
                 XYZ legDir = null;
                 if (count > 1)
@@ -144,7 +154,8 @@ namespace ColumnRebar
                 if (leg > 0) AddLine(curves, bottom + legDir * leg, bottom);
                 AddLine(curves, bottom, top);
 
-                string name = "longitudinal v=" + ToMm(first.V) + (count > 1 ? " (" + count + " barras cada " + ToMm(step) + " mm)" : " u=" + ToMm(first.U));
+                string name = (required ? "longitudinal esquina" : "longitudinal intermedia") + " v=" + ToMm(first.V) +
+                              (count > 1 ? " (" + count + " barras cada " + ToMm(step) + " mm)" : " u=" + ToMm(first.U));
                 Place(c, name, bt, RebarStyle.Standard, ElementId.InvalidElementId, true, normal, curves, count, step, longitudinal: true, stirrup: "");
                 c.Result.Bars += count;
             }
