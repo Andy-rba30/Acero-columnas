@@ -15,30 +15,17 @@ namespace ColumnRebar
         /// <summary>Tipo de barra de las intermedias. Vacio = el mismo que las de esquina.</summary>
         public string IntermediateBarTypeName { get; set; } = "";
         /// <summary>
-        /// Como se reparten las intermedias: "spacing" = por separacion maxima (MaxSpacingMm);
-        /// "count" = por numero de barras (TopCount / BottomCount / SideCount por estribo, editable
-        /// por columna y por estribo en la ventana).
+        /// Minimo general de barras por fila (los lados horizontales de los estribos, obligadas
+        /// incluidas). Cada columna puede subirlo fila a fila en la ventana.
         /// </summary>
-        public string Mode { get; set; } = "count";
+        public int RowCount { get; set; } = 3;
+        /// <summary>Minimo general de barras por vertical (los lados verticales de los estribos, esquinas incluidas). 2 = solo esquinas.</summary>
+        public int ColCount { get; set; } = 2;
         /// <summary>
-        /// Modo por separacion: separacion maxima entre barras (eje a eje, mm) a lo largo de cada
-        /// lado de cada estribo. Entre dos barras obligadas (esquinas de estribos y cruces de
-        /// estribos) se anaden las intermedias necesarias para no superarla.
-        /// </summary>
-        public double MaxSpacingMm { get; set; } = 150;
-        /// <summary>Modo por numero: total de barras en el lado superior de cada estribo (esquinas incluidas).</summary>
-        public int TopCount { get; set; } = 3;
-        /// <summary>Modo por numero: total de barras en el lado inferior de cada estribo (esquinas incluidas).</summary>
-        public int BottomCount { get; set; } = 3;
-        /// <summary>Modo por numero: intermedias en cada costado de cada estribo (sin contar las esquinas).</summary>
-        public int SideCount { get; set; } = 1;
-        /// <summary>
-        /// Modo por numero: donde van las barras anadidas cuando otro estribo parte el lado:
-        /// "auto" (hueco mas grande), "left", "right" o "center" (simetrico). Cambiable por estribo en la ventana.
+        /// Donde van las barras anadidas cuando otro estribo parte la linea: "auto" (hueco mas
+        /// grande), "left", "right" o "center" (simetrico). Cambiable linea a linea en la ventana.
         /// </summary>
         public string FillMode { get; set; } = "auto";
-        [JsonIgnore]
-        public bool ByCount => !string.Equals((Mode ?? "").Trim(), "spacing", StringComparison.OrdinalIgnoreCase);
         /// <summary>Prolongacion de las barras por debajo de la base de la columna (mm, hacia la cimentacion o el piso inferior). 0 = empiezan en la base.</summary>
         public double BottomExtensionMm { get; set; } = 0;
         /// <summary>Prolongacion por encima de la coronacion (mm, empalme con el piso siguiente). 0 = terminan en la coronacion.</summary>
@@ -128,11 +115,9 @@ namespace ColumnRebar
             if (Crossties == null) Crossties = new CrosstieCfg();
             if (Longitudinal.BarTypeName == null) Longitudinal.BarTypeName = "";
             if (Longitudinal.IntermediateBarTypeName == null) Longitudinal.IntermediateBarTypeName = "";
-            Longitudinal.Mode = Longitudinal.ByCount ? "count" : "spacing";
             Longitudinal.LegDirection = Longitudinal.LegOutward ? "out" : "in";
-            if (Longitudinal.TopCount < 2) Longitudinal.TopCount = 2;
-            if (Longitudinal.BottomCount < 2) Longitudinal.BottomCount = 2;
-            if (Longitudinal.SideCount < 0) Longitudinal.SideCount = 0;
+            if (Longitudinal.RowCount < 2) Longitudinal.RowCount = 2;
+            if (Longitudinal.ColCount < 2) Longitudinal.ColCount = 2;
             string fm = (Longitudinal.FillMode ?? "").Trim().ToLowerInvariant();
             Longitudinal.FillMode = fm == "left" || fm == "right" || fm == "center" ? fm : "auto";
             if (Stirrups.BarTypeName == null) Stirrups.BarTypeName = "";
@@ -140,7 +125,6 @@ namespace ColumnRebar
             if (Crossties.BarTypeName == null) Crossties.BarTypeName = "";
             if (Crossties.HookTypeName == null) Crossties.HookTypeName = "";
             if (string.IsNullOrWhiteSpace(Stirrups.Distribution)) Stirrups.Distribution = "1@50, 5@100, R@250";
-            if (Longitudinal.MaxSpacingMm <= 0) Longitudinal.MaxSpacingMm = 150;
             if (Longitudinal.BottomLegMm < 0) Longitudinal.BottomLegMm = 0;
             if (CoverMm < 0) CoverMm = 0;
             if (ProbeSliceMm <= 0) ProbeSliceMm = 10;

@@ -12,8 +12,6 @@ namespace ColumnRebar
         public bool Required;
         /// <summary>Estribo y lado en el que se apoya una intermedia (0 abajo, 1 arriba, 2 izquierda, 3 derecha; -1 en obligadas).</summary>
         public int Stirrup = -1, Edge = -1;
-        /// <summary>Coordenada a lo largo del lado (u en lados horizontales, v en verticales).</summary>
-        public double Along;
         public override string ToString() => P.ToString();
     }
 
@@ -36,23 +34,33 @@ namespace ColumnRebar
         public bool AlongU => Math.Abs(A.V - B.V) < 1e-9;
     }
 
-    /// <summary>
-    /// Numero de barras de un estribo en modo "por numero": total arriba, total abajo
-    /// (esquinas incluidas) e intermedias por costado (sin las esquinas; los cruces con
-    /// otros estribos cuentan como intermedias).
-    /// </summary>
-    public sealed class BarCounts
+    /// <summary>Numero de barras y reparto de una linea (fila o vertical) elegidos para una columna.</summary>
+    public sealed class LineSpec
     {
-        public int Top = 3, Bottom = 3, Side = 1;
-        /// <summary>
-        /// Donde van las barras que se anaden cuando el lado esta partido por otro estribo:
-        /// "auto" = al hueco mas grande; "left" = al hueco de la izquierda (en los costados,
-        /// el de abajo); "right" = al de la derecha (arriba); "center" = simetrico, alternando
-        /// izquierda y derecha (o el hueco central primero). "" = el general.
-        /// </summary>
+        /// <summary>Total de barras en la linea (obligadas incluidas). 0 = el general.</summary>
+        public int Count;
+        /// <summary>"auto", "left", "right", "center" o "" (el general).</summary>
         public string Fill = "";
-        public BarCounts Clone() => new BarCounts { Top = Top, Bottom = Bottom, Side = Side, Fill = Fill };
-        public override string ToString() => Top + "/" + Bottom + "/" + Side;
+        public LineSpec Clone() => new LineSpec { Count = Count, Fill = Fill };
+    }
+
+    /// <summary>
+    /// Una linea de barras de la seccion: fila (horizontal, coordenada v) o vertical
+    /// (coordenada u). Reune los lados de estribo que caen sobre ella.
+    /// </summary>
+    public sealed class PlanLine
+    {
+        public int Index;
+        public bool Horizontal;
+        /// <summary>Coordenada de los ejes de las barras de esquina de la linea (v en filas, u en verticales).</summary>
+        public double Coord;
+        /// <summary>Lados de estribo (estribo, lado) que apoyan barras en esta linea.</summary>
+        public List<(int stirrup, int edge)> Edges = new List<(int, int)>();
+        /// <summary>Barras que han quedado en la linea (obligadas e intermedias).</summary>
+        public int Bars;
+        /// <summary>Barras que no se pudieron colocar por falta de sitio.</summary>
+        public int Missing;
+        public string Name => (Horizontal ? "F" : "V") + (Index + 1);
     }
 
     /// <summary>Todo lo que necesita ColumnPlan.Build (en pies).</summary>
@@ -61,18 +69,30 @@ namespace ColumnRebar
         public double Cover;
         /// <summary>Diametro del estribo, de las barras de esquina y de las intermedias.</summary>
         public double Ds, DbCorner, DbInter;
-        /// <summary>true = intermedias por numero (Counts); false = por separacion maxima (MaxSpacing).</summary>
-        public bool ByCount;
-        public double MaxSpacing;
-        /// <summary>Numero de barras por estribo (indice del rectangulo); null o fuera de rango = Default.</summary>
-        public IList<BarCounts> Counts;
-        public BarCounts DefaultCounts = new BarCounts();
+        /// <summary>Minimo general de barras por fila y por vertical (obligadas incluidas).</summary>
+        public int RowCount = 3, ColCount = 2;
+        /// <summary>Reparto general de las anadidas: "auto", "left", "right", "center".</summary>
+        public string Fill = "auto";
+        /// <summary>Elecciones por linea de esta columna (indice = fila de arriba abajo / vertical de izquierda a derecha); null = general.</summary>
+        public IList<LineSpec> Rows, Cols;
         public bool TiesU, TiesV;
         public double Dt;
         public double Tol;
 
-        public BarCounts CountsFor(int stirrup) =>
-            Counts != null && stirrup < Counts.Count && Counts[stirrup] != null ? Counts[stirrup] : DefaultCounts;
+        public int CountFor(bool horizontal, int index)
+        {
+            IList<LineSpec> list = horizontal ? Rows : Cols;
+            int general = horizontal ? RowCount : ColCount;
+            LineSpec own = list != null && index < list.Count ? list[index] : null;
+            return own == null ? general : Math.Max(general, own.Count);
+        }
+
+        public string FillFor(bool horizontal, int index)
+        {
+            IList<LineSpec> list = horizontal ? Rows : Cols;
+            LineSpec own = list != null && index < list.Count ? list[index] : null;
+            return own == null || string.IsNullOrEmpty(own.Fill) ? Fill : own.Fill;
+        }
     }
 
     /// <summary>
@@ -84,18 +104,22 @@ namespace ColumnRebar
     ///  - cada rectangulo maximo de la seccion lleva un estribo cerrado a "cover" de las caras;
     ///  - hay barra obligada (diametro de esquina) en cada esquina de cada estribo y donde un
     ///    lado de un estribo cruza un lado de otro (la barra queda apoyada en los dos);
-    ///  - las intermedias (su propio diametro) se reparten a lo largo de cada lado entre las
-    ///    obligadas: por separacion maxima, o por numero (total arriba y abajo, intermedias
-    ///    por costado), siempre en los huecos mas grandes para que queden lo mas uniformes
-    ///    posible respetando las obligadas;
-    ///  - grapas opcionales entre cada par de intermedias enfrentadas (misma coordenada a lo
-    ///    largo del lado) que no tenga ya un lado de otro estribo pasando por ahi.
+    ///  - las barras se cuentan por lineas: filas (los lados horizontales de los estribos, de
+    ///    arriba abajo) y verticales (los lados verticales, de izquierda a derecha). En una
+    ///    seccion rectangular hay 2 filas y 2 verticales; en una L, 3 y 3. Cada linea lleva
+    ///    un total de barras (obligadas incluidas): las que faltan se anaden, con su propio
+    ///    diametro, en los huecos entre obligadas segun el reparto elegido, nunca a menos de
+    ///    1.5 diametros libres;
+    ///  - grapas opcionales entre cada par de intermedias enfrentadas de un mismo estribo
+    ///    que no tenga ya un lado de otro estribo pasando por ahi.
     /// </summary>
     public sealed class ColumnPlan
     {
         public List<PlanStirrup> Stirrups = new List<PlanStirrup>();
         public List<PlanBar> Bars = new List<PlanBar>();
         public List<PlanTie> Ties = new List<PlanTie>();
+        public List<PlanLine> Rows = new List<PlanLine>();
+        public List<PlanLine> Cols = new List<PlanLine>();
         public List<string> Warnings = new List<string>();
         public string Error;
         public PlanOptions Opt;
@@ -115,14 +139,20 @@ namespace ColumnRebar
             : Bars.Count + " barras (" + RequiredCount + " en esquinas y cruces, " + IntermediateCount + " intermedias), " +
               Stirrups.Count + (Stirrups.Count == 1 ? " estribo" : " estribos") + (Ties.Count > 0 ? ", " + Ties.Count + " grapas" : "");
 
-        /// <summary>Resumen por estribo: "E1 4/4/1" (arriba/abajo/intermedias por costado).</summary>
-        public string DescribeCounts()
+        /// <summary>Resumen por linea: "F1 4, F2 3, F3 2 | V1 3, V2 2".</summary>
+        public string DescribeLines() =>
+            string.Join(", ", Rows.Select(l => l.Name + " " + l.Bars)) + " | " + string.Join(", ", Cols.Select(l => l.Name + " " + l.Bars));
+
+        /// <summary>
+        /// Lineas de la seccion (filas o verticales) que tendria esta geometria con estos
+        /// diametros, sin colocar barras: para que la ventana sepa cuantas entradas mostrar.
+        /// </summary>
+        public static (int rows, int cols) LineCount(IList<Rect> rects, double cover, double ds, double dbCorner, double tol)
         {
-            var parts = new List<string>();
-            foreach (PlanStirrup s in Stirrups)
-                parts.Add("E" + (s.Index + 1) + " " + EdgeBars(s, 1).Count + "/" + EdgeBars(s, 0).Count + "/" +
-                          EdgeBars(s, 2).Count(b => !IsCornerOf(s, b)));
-            return string.Join(", ", parts);
+            var plan = new ColumnPlan { Opt = new PlanOptions { Cover = cover, Ds = ds, DbCorner = dbCorner, DbInter = dbCorner, Tol = tol } };
+            if (!plan.MakeStirrups(rects)) return (0, 0);
+            plan.MakeLines();
+            return (plan.Rows.Count, plan.Cols.Count);
         }
 
         // lados: 0 abajo (v = Line.V1, hacia +v), 1 arriba (v = Line.V2, hacia -v), 2 izquierda (u = Line.U1, hacia +u), 3 derecha (u = Line.U2, hacia -u)
@@ -130,6 +160,8 @@ namespace ColumnRebar
             edge == 0 ? s.Line.V1 : edge == 1 ? s.Line.V2 : edge == 2 ? s.Line.U1 : s.Line.U2;
         private static double Inward(int edge) => edge == 0 || edge == 2 ? 1 : -1;
         private static bool Horizontal(int edge) => edge < 2;
+        private double OffC => 0.5 * Opt.Ds + 0.5 * Opt.DbCorner;
+        private double OffI => 0.5 * Opt.Ds + 0.5 * Opt.DbInter;
 
         private Pt PointOn(PlanStirrup s, int edge, double along, double off)
         {
@@ -137,14 +169,16 @@ namespace ColumnRebar
             return Horizontal(edge) ? new Pt(along, perp) : new Pt(perp, along);
         }
 
+        /// <summary>Rango a lo largo del lado (entre sus dos barras de esquina).</summary>
+        private static (double a0, double a1) Range(PlanStirrup s, int edge) =>
+            Horizontal(edge) ? (s.BarLine.U1, s.BarLine.U2) : (s.BarLine.V1, s.BarLine.V2);
+
         /// <summary>Barras (obligadas o intermedias, con cualquiera de los dos diametros) apoyadas en el lado dado, ordenadas a lo largo.</summary>
         public List<PlanBar> EdgeBars(PlanStirrup s, int edge)
         {
-            double offC = 0.5 * Opt.Ds + 0.5 * Opt.DbCorner, offI = 0.5 * Opt.Ds + 0.5 * Opt.DbInter;
-            double lo = Math.Min(offC, offI) - Opt.Tol, hi = Math.Max(offC, offI) + Opt.Tol;
+            double lo = Math.Min(OffC, OffI) - Opt.Tol, hi = Math.Max(OffC, OffI) + Opt.Tol;
             double line = LineCoord(s, edge), inw = Inward(edge);
-            double a0 = Horizontal(edge) ? s.BarLine.U1 : s.BarLine.V1;
-            double a1 = Horizontal(edge) ? s.BarLine.U2 : s.BarLine.V2;
+            (double a0, double a1) = Range(s, edge);
             var list = new List<PlanBar>();
             foreach (PlanBar b in Bars)
             {
@@ -163,27 +197,53 @@ namespace ColumnRebar
                    (Math.Abs(b.P.V - r.V1) <= Opt.Tol || Math.Abs(b.P.V - r.V2) <= Opt.Tol);
         }
 
+        private bool MakeStirrups(IList<Rect> rects)
+        {
+            PlanOptions o = Opt;
+            for (int i = 0; i < rects.Count; i++)
+            {
+                Rect line = rects[i].Inset(o.Cover + 0.5 * o.Ds);
+                Rect bar = line.Inset(OffC);
+                if (bar.W <= o.Tol || bar.H <= o.Tol)
+                {
+                    Error = "el estribo " + (i + 1) + " (" + ToMm(rects[i].W) + " x " + ToMm(rects[i].H) +
+                            " mm) no cabe con recubrimiento " + ToMm(o.Cover) + " mm y estas barras";
+                    return false;
+                }
+                Stirrups.Add(new PlanStirrup { Index = i, Concrete = rects[i].Clone(), Line = line, BarLine = bar });
+            }
+            return true;
+        }
+
+        /// <summary>Agrupa los lados de los estribos en filas (de arriba abajo) y verticales (de izquierda a derecha).</summary>
+        private void MakeLines()
+        {
+            foreach (bool horizontal in new[] { true, false })
+            {
+                var items = new List<(double coord, int stirrup, int edge)>();
+                foreach (PlanStirrup s in Stirrups)
+                    foreach (int e in horizontal ? new[] { 0, 1 } : new[] { 2, 3 })
+                        items.Add((LineCoord(s, e) + Inward(e) * OffC, s.Index, e));
+                List<double> coords = Rectilinear.Cluster(items.Select(x => x.coord), Opt.Tol);
+                if (horizontal) coords.Reverse();   // filas de arriba abajo
+                var lines = horizontal ? Rows : Cols;
+                for (int i = 0; i < coords.Count; i++)
+                {
+                    var line = new PlanLine { Index = i, Horizontal = horizontal, Coord = coords[i] };
+                    foreach (var it in items)
+                        if (Math.Abs(it.coord - coords[i]) <= Opt.Tol) line.Edges.Add((it.stirrup, it.edge));
+                    lines.Add(line);
+                }
+            }
+        }
+
         public static ColumnPlan Build(IList<Pt> polygon, IList<Rect> rects, PlanOptions o)
         {
             var plan = new ColumnPlan { Opt = o };
             double tol = o.Tol;
             if (rects == null || rects.Count == 0) { plan.Error = "la seccion no tiene ningun rectangulo"; return plan; }
-            double offC = 0.5 * o.Ds + 0.5 * o.DbCorner;   // del eje del estribo al eje de la barra de esquina
-            double offI = 0.5 * o.Ds + 0.5 * o.DbInter;    // idem para una intermedia
-
-            // --- estribos ---
-            for (int i = 0; i < rects.Count; i++)
-            {
-                Rect line = rects[i].Inset(o.Cover + 0.5 * o.Ds);
-                Rect bar = line.Inset(offC);
-                if (bar.W <= tol || bar.H <= tol)
-                {
-                    plan.Error = "el estribo " + (i + 1) + " (" + ToMm(rects[i].W) + " x " + ToMm(rects[i].H) +
-                                 " mm) no cabe con recubrimiento " + ToMm(o.Cover) + " mm y estas barras";
-                    return plan;
-                }
-                plan.Stirrups.Add(new PlanStirrup { Index = i, Concrete = rects[i].Clone(), Line = line, BarLine = bar });
-            }
+            if (!plan.MakeStirrups(rects)) return plan;
+            double offC = plan.OffC, offI = plan.OffI;
 
             // --- barras obligadas: esquinas de cada estribo ---
             foreach (PlanStirrup s in plan.Stirrups)
@@ -208,40 +268,43 @@ namespace ColumnRebar
                         }
                 }
 
-            // --- intermedias, por pares de lados enfrentados de cada estribo ---
-            foreach (PlanStirrup s in plan.Stirrups)
+            // --- intermedias, linea a linea ---
+            plan.MakeLines();
+            double minSp = 2.5 * o.DbInter;   // 1.5 diametros libres entre barras
+            foreach (PlanLine line in plan.Rows.Concat(plan.Cols))
             {
-                BarCounts n = o.CountsFor(s.Index);
-                foreach ((int e1, int e2) in new[] { (0, 1), (2, 3) })
+                // barras ya en la linea (obligadas) con la posicion a lo largo
+                var fixedBars = new List<(double along, PlanBar bar)>();
+                foreach ((int si, int e) in line.Edges)
+                    foreach (PlanBar b in plan.EdgeBars(plan.Stirrups[si], e))
+                        if (!fixedBars.Any(x => ReferenceEquals(x.bar, b)))
+                            fixedBars.Add((line.Horizontal ? b.P.U : b.P.V, b));
+                fixedBars.Sort((x, y) => x.along.CompareTo(y.along));
+
+                // huecos: entre dos barras consecutivas que esten sobre un mismo lado de estribo
+                // (asi no se cruza el vacio de una U); cada hueco recuerda el lado que lo cubre
+                var gaps = new List<(double a, double b, int stirrup, int edge)>();
+                for (int i = 0; i + 1 < fixedBars.Count; i++)
                 {
-                    List<double> f1 = plan.EdgeBars(s, e1).Select(b => Horizontal(e1) ? b.P.U : b.P.V).ToList();
-                    List<double> f2 = plan.EdgeBars(s, e2).Select(b => Horizontal(e2) ? b.P.U : b.P.V).ToList();
-                    List<double> add1, add2;
-                    if (o.ByCount)
+                    double a = fixedBars[i].along, b = fixedBars[i + 1].along;
+                    if (b - a <= tol) continue;
+                    foreach ((int si, int e) in line.Edges)
                     {
-                        // arriba/abajo: total de barras en el lado; costados: 2 esquinas + intermedias (los cruces
-                        // con otros estribos cuentan como intermedias). Los estribos se recorren en orden (E1, E2...):
-                        // las barras que ya puso un estribo anterior sobre el mismo lado cuentan para este, asi
-                        // en un lado compartido manda el primero.
-                        int want1 = e1 == 0 ? n.Bottom : 2 + Math.Max(0, n.Side);
-                        int want2 = e2 == 1 ? n.Top : 2 + Math.Max(0, n.Side);
-                        double minSp = 2.5 * o.DbInter;   // 1.5 diametros libres entre barras
-                        add1 = FillByCount(Rectilinear.Cluster(f1, tol), want1 - f1.Count, minSp, n.Fill, out int miss1);
-                        add2 = FillByCount(Rectilinear.Cluster(f2, tol), want2 - f2.Count, minSp, n.Fill, out int miss2);
-                        if (miss1 > 0) plan.Warnings.Add("E" + (s.Index + 1) + " " + EdgeName(e1) + ": no caben " + miss1 + " barra(s) mas con 1.5 diametros libres");
-                        if (miss2 > 0) plan.Warnings.Add("E" + (s.Index + 1) + " " + EdgeName(e2) + ": no caben " + miss2 + " barra(s) mas con 1.5 diametros libres");
+                        (double r0, double r1) = Range(plan.Stirrups[si], e);
+                        if (r0 <= a + tol && r1 >= b - tol) { gaps.Add((a, b, si, e)); break; }
                     }
-                    else
-                    {
-                        // las mismas posiciones en los dos lados enfrentados (para poder atarlas con grapas)
-                        List<double> union = Rectilinear.Cluster(f1.Concat(f2), tol);
-                        List<double> filled = FillBySpacing(union, o.MaxSpacing);
-                        add1 = filled.Where(x => !f1.Any(y => Math.Abs(x - y) <= tol)).ToList();
-                        add2 = filled.Where(x => !f2.Any(y => Math.Abs(x - y) <= tol)).ToList();
-                    }
-                    foreach (double x in add1) plan.AddIntermediate(s, e1, x, offI);
-                    foreach (double x in add2) plan.AddIntermediate(s, e2, x, offI);
                 }
+
+                int want = o.CountFor(line.Horizontal, line.Index);
+                int count = want - fixedBars.Count;
+                List<(int gap, double pos)> added = FillByCount(gaps.Select(g => (g.a, g.b)).ToList(), count, minSp,
+                                                                o.FillFor(line.Horizontal, line.Index), out int missing);
+                foreach ((int gi, double pos) in added)
+                    plan.AddIntermediate(plan.Stirrups[gaps[gi].stirrup], gaps[gi].edge, pos, offI);
+                line.Bars = fixedBars.Count + added.Count;
+                line.Missing = missing;
+                if (missing > 0)
+                    plan.Warnings.Add(line.Name + ": no caben " + missing + " barra(s) mas con 1.5 diametros libres");
             }
 
             // --- grapas: entre intermedias enfrentadas con la misma coordenada a lo largo del lado ---
@@ -276,52 +339,35 @@ namespace ColumnRebar
             return plan;
         }
 
-        /// <summary>Anade a la lista ordenada las posiciones intermedias necesarias para no superar "maxSpacing".</summary>
-        private static List<double> FillBySpacing(List<double> sorted, double maxSpacing)
-        {
-            var result = new List<double>(sorted);
-            if (maxSpacing <= 1e-9) return result;
-            for (int i = 0; i + 1 < sorted.Count; i++)
-            {
-                double gap = sorted[i + 1] - sorted[i];
-                int n = (int)Math.Ceiling(gap / maxSpacing - 1e-9) - 1;
-                for (int k = 1; k <= n; k++) result.Add(sorted[i] + gap * k / (n + 1));
-            }
-            return result.OrderBy(x => x).ToList();
-        }
-
-        private static string EdgeName(int edge) => edge == 0 ? "abajo" : edge == 1 ? "arriba" : edge == 2 ? "costado izquierdo" : "costado derecho";
-
         /// <summary>
-        /// Reparte "count" barras nuevas entre las posiciones fijas segun "mode":
+        /// Reparte "count" barras nuevas entre los huecos segun "mode":
         ///  "auto"   = cada una al hueco con la separacion resultante mas grande (lo mas uniforme posible);
-        ///  "left"   = al primer hueco empezando por la izquierda (abajo en los costados) que la admita;
+        ///  "left"   = al primer hueco empezando por la izquierda (abajo en las verticales) que la admita;
         ///  "right"  = idem empezando por la derecha (arriba);
         ///  "center" = simetrico: por pares izquierda-derecha, el par mas cercano al centro primero; el hueco central al final.
         /// No se anade ninguna que deje una separacion menor que "minSpacing" (eje a eje);
-        /// "missing" dice cuantas se han quedado sin colocar. Devuelve solo las nuevas.
+        /// "missing" dice cuantas se han quedado sin colocar. Devuelve (indice del hueco, posicion).
         /// </summary>
-        private static List<double> FillByCount(List<double> sorted, int count, double minSpacing, string mode, out int missing)
+        private static List<(int gap, double pos)> FillByCount(List<(double a, double b)> gaps, int count, double minSpacing, string mode, out int missing)
         {
-            var added = new List<double>();
+            var added = new List<(int, double)>();
             missing = 0;
-            if (count <= 0 || sorted.Count < 2) { missing = Math.Max(0, count); return added; }
-            int n = sorted.Count - 1;
+            int n = gaps.Count;
+            if (count <= 0 || n == 0) { missing = Math.Max(0, count); return added; }
             var perGap = new int[n];   // barras nuevas en cada hueco
             string m = (mode ?? "").Trim().ToLowerInvariant();
 
-            // orden de preferencia de los huecos (null = por separacion)
             List<int> order = null;
             if (m == "left") order = Enumerable.Range(0, n).ToList();
             else if (m == "right") order = Enumerable.Range(0, n).Reverse().ToList();
             else if (m == "center")
             {
-                // por pares simetricos (izquierda y despues derecha), el par mas cercano al centro
-                // primero; el hueco central, si lo hay, queda para el final
                 order = Enumerable.Range(0, n).Where(i => 2 * i != n - 1)
                                   .OrderBy(i => Math.Abs(2 * i - (n - 1))).ThenBy(i => i).ToList();
                 if (n % 2 == 1) order.Add((n - 1) / 2);
             }
+
+            double Sp(int i) => (gaps[i].b - gaps[i].a) / (perGap[i] + 2);   // separacion si se anade una mas
 
             for (int k = 0; k < count; k++)
             {
@@ -330,33 +376,28 @@ namespace ColumnRebar
                 {
                     double bestSp = -1;
                     for (int i = 0; i < n; i++)
-                    {
-                        double sp = (sorted[i + 1] - sorted[i]) / (perGap[i] + 2);   // separacion si se anade una mas
-                        if (sp >= minSpacing && sp > bestSp) { bestSp = sp; best = i; }
-                    }
+                        if (Sp(i) >= minSpacing && Sp(i) > bestSp) { bestSp = Sp(i); best = i; }
                 }
                 else if (m == "center")
                 {
-                    // la k-esima barra va al k-esimo hueco del orden simetrico; si no cabe, al siguiente
                     for (int t = 0; t < n && best < 0; t++)
                     {
                         int i = order[(k + t) % n];
-                        if ((sorted[i + 1] - sorted[i]) / (perGap[i] + 2) >= minSpacing) best = i;
+                        if (Sp(i) >= minSpacing) best = i;
                     }
                 }
                 else
                 {
-                    // todas al primer hueco del orden que las admita
                     foreach (int i in order)
-                        if ((sorted[i + 1] - sorted[i]) / (perGap[i] + 2) >= minSpacing) { best = i; break; }
+                        if (Sp(i) >= minSpacing) { best = i; break; }
                 }
                 if (best < 0) { missing = count - k; break; }
                 perGap[best]++;
             }
             for (int i = 0; i < n; i++)
             {
-                double gap = sorted[i + 1] - sorted[i];
-                for (int k = 1; k <= perGap[i]; k++) added.Add(sorted[i] + gap * k / (perGap[i] + 1));
+                double gap = gaps[i].b - gaps[i].a;
+                for (int k = 1; k <= perGap[i]; k++) added.Add((i, gaps[i].a + gap * k / (perGap[i] + 1)));
             }
             return added;
         }
@@ -365,18 +406,18 @@ namespace ColumnRebar
         private bool LegAt(bool horizontal, double coord, double from, double to)
         {
             double tol = Opt.Tol;
-            double offC = 0.5 * Opt.Ds + 0.5 * Opt.DbCorner, offI = 0.5 * Opt.Ds + 0.5 * Opt.DbInter;
+            double off = Math.Max(OffC, OffI);
             foreach (PlanStirrup s in Stirrups)
             {
                 if (horizontal)
                 {
                     foreach (double v in new[] { s.Line.V1, s.Line.V2 })
-                        if (Math.Abs(v - coord) <= Math.Max(offC, offI) + tol && s.Line.U1 <= from + tol && s.Line.U2 >= to - tol) return true;
+                        if (Math.Abs(v - coord) <= off + tol && s.Line.U1 <= from + tol && s.Line.U2 >= to - tol) return true;
                 }
                 else
                 {
                     foreach (double u in new[] { s.Line.U1, s.Line.U2 })
-                        if (Math.Abs(u - coord) <= Math.Max(offC, offI) + tol && s.Line.V1 <= from + tol && s.Line.V2 >= to - tol) return true;
+                        if (Math.Abs(u - coord) <= off + tol && s.Line.V1 <= from + tol && s.Line.V2 >= to - tol) return true;
                 }
             }
             return false;
@@ -394,7 +435,7 @@ namespace ColumnRebar
             Pt p = PointOn(s, edge, along, offI);
             foreach (PlanBar b in Bars)
                 if (b.P.DistanceTo(p) <= Opt.Tol) return;
-            Bars.Add(new PlanBar { P = p, Required = false, Stirrup = s.Index, Edge = edge, Along = along });
+            Bars.Add(new PlanBar { P = p, Required = false, Stirrup = s.Index, Edge = edge });
         }
 
         /// <summary>
@@ -402,7 +443,8 @@ namespace ColumnRebar
         /// (misma v): cada fila es un conjunto de Revit con "count" barras desde "first"
         /// cada "step". Las filas de una sola barra son conjuntos sencillos.
         /// </summary>
-        public List<(Pt first, int count, double step, bool required)> Rows(double tol)
+
+        public List<(Pt first, int count, double step, bool required)> ArrayRows(double tol)
         {
             var rows = new List<(Pt, int, double, bool)>();
             foreach (bool req in new[] { true, false })

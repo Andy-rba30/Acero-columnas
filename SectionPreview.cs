@@ -147,7 +147,7 @@ namespace ColumnRebar
             Children.Add(poly);
 
             // cotas generales
-            Text(Mm(_s.Width) + " mm", X(_s.Width / 2) - 25, Y(0) + 6, Brushes.DimGray, 11);
+            Text(Mm(_s.Width) + " mm", X(_s.Width / 2) - 25, Y(0) + 18, Brushes.DimGray, 11);
             Text(Mm(_s.Depth) + " mm", X(_s.Width) + 6, Y(_s.Depth / 2) - 8, Brushes.DimGray, 11);
 
             if (_plan.Error != null)
@@ -230,8 +230,14 @@ namespace ColumnRebar
                 Children.Add(e);
             }
 
+            // etiquetas de filas (izquierda) y verticales (abajo)
+            foreach (PlanLine l in _plan.Rows)
+                Text(l.Name, X(0) - 26, Y(l.Coord) - 8, Brushes.DimGray, 10, true);
+            foreach (PlanLine l in _plan.Cols)
+                Text(l.Name, X(l.Coord) - 8, Y(0) + 4, Brushes.DimGray, 10, true);
+
             // resumen
-            Text(_plan.Describe() + " | " + _plan.DescribeCounts() + " (arriba/abajo/intermedias por costado)", 8, H - 20, Brushes.DimGray, 11);
+            Text(_plan.Describe() + " | " + _plan.DescribeLines(), 8, H - 20, Brushes.DimGray, 11);
             if (_plan.Warnings.Count > 0) Text(string.Join(" | ", _plan.Warnings), 8, H - 36, Brushes.Firebrick, 11);
         }
 

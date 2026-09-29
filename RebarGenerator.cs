@@ -95,12 +95,11 @@ namespace ColumnRebar
         public static ColumnPlan PlanFor(HostAnalysis item, AppConfig cfg, double dbCornerFt, double dbInterFt, double dsFt, double dtFt)
         {
             ColumnSection s = item.Section;
-            var counts = new List<BarCounts>();
-            for (int i = 0; i < s.Rects.Count; i++) counts.Add(item.CountsFor(cfg, i));
             var o = new PlanOptions
             {
                 Cover = Mm(cfg.CoverMm), Ds = dsFt, DbCorner = dbCornerFt, DbInter = dbInterFt,
-                ByCount = cfg.Longitudinal.ByCount, MaxSpacing = Mm(item.MaxSpacingMm(cfg)), Counts = counts,
+                RowCount = cfg.Longitudinal.RowCount, ColCount = cfg.Longitudinal.ColCount, Fill = cfg.Longitudinal.FillMode,
+                Rows = item.RowOverrides, Cols = item.ColOverrides,
                 TiesU = cfg.Crossties.Enabled && cfg.TiesU, TiesV = cfg.Crossties.Enabled && cfg.TiesV, Dt = dtFt,
                 Tol = Mm(cfg.PrismCheckToleranceMm)
             };
@@ -133,7 +132,7 @@ namespace ColumnRebar
             // patilla hacia fuera (lo normal en el arranque) o hacia el centro de la seccion
             double sign = L.LegOutward ? -1 : 1;
 
-            foreach ((Pt first, int count, double step, bool required) in c.Plan.Rows(c.Tol))
+            foreach ((Pt first, int count, double step, bool required) in c.Plan.ArrayRows(c.Tol))
             {
                 RebarBarType bt = required ? btCorner : btInter;
                 XYZ normal;

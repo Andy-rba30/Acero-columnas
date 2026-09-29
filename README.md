@@ -50,34 +50,28 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
 - Hay **barra obligada** en cada esquina de cada estribo y en cada punto en que un
   lado de un estribo **cruza** un lado de otro (la barra queda apoyada en los dos,
   como en la esquina interior de una L). Llevan el tipo de barra **de esquina**.
-- Las **intermedias** van a lo largo de cada lado, entre las obligadas, con su propio
-  tipo de barra (puede ser otro diámetro, por ejemplo esquinas Ø3/4" e intermedias
-  Ø5/8"). Se reparten de dos formas:
-  - **Por número** (por defecto, como en los planos): para cada estribo se escribe el
-    total de barras del lado superior, el del inferior (esquinas incluidas) y las
-    intermedias de cada costado. Los valores generales de la ventana son el
-    **mínimo**; en el cuadro de la columna seleccionada se puede **subir** el número
-    estribo a estribo (nunca bajarlo). Las intermedias se colocan siempre en los
-    huecos más grandes entre las obligadas, así quedan lo más uniformes posible sin
-    mover las esquinas ni los cruces; no se añade ninguna que deje menos de 1.5
-    diámetros libres (se avisa). Los estribos se recorren en orden (E1, E2...): en
-    un lado compartido, las barras que ya puso E1 cuentan para E2, así manda el
-    primero. Cuando otro estribo parte el lado (la esquina interior de una L), el
-    **reparto** dice dónde van las añadidas: al hueco más grande, hacia la
-    izquierda, hacia la derecha o simétrico (alternando; en los costados izquierda
-    es abajo y derecha es arriba). También se cambia estribo a estribo.
-  - **Por separación máxima**: se añaden las necesarias para no superar
-    `maxSpacingMm` (eje a eje). Las de dos lados enfrentados se colocan a la misma
-    cota para poder atarlas con grapas.
+- Las **intermedias** llevan su propio tipo de barra (puede ser otro diámetro, por
+  ejemplo esquinas Ø3/4" e intermedias Ø5/8") y se cuentan **por líneas**, que el
+  plugin detecta en la sección: **filas** (los lados horizontales de los estribos,
+  de arriba abajo: F1, F2...) y **verticales** (los lados verticales, de izquierda a
+  derecha: V1, V2...). Una sección rectangular tiene 2 filas y 2 verticales; una L,
+  3 y 3; una T, 3 filas y 4 verticales. Cada línea lleva un **total de barras**
+  (obligadas incluidas). En la ventana hay un mínimo general por fila y por
+  vertical, y un cuadro con una entrada por línea de la columna seleccionada donde
+  solo se puede **subir**. Las que faltan se añaden en los huecos entre obligadas
+  (sin cruzar nunca el vacío de una U), nunca a menos de 1.5 diámetros libres (si no
+  caben, la casilla se pone en rojo y se avisa). Cuando otro estribo parte la línea
+  (la esquina interior de una L), el **reparto** dice dónde van: al hueco más grande,
+  hacia la izquierda, hacia la derecha o simétrico (por pares izquierda-derecha; en
+  las verticales izquierda es abajo). También se cambia línea a línea.
 - **Grapas** (opcionales): una por cada par de intermedias enfrentadas de un mismo
   estribo, salvo donde ya pasa el lado de otro estribo. Se colocan en cada cota de
   estribo, con sus ganchos.
 
-Con recubrimiento 40 mm, estribo Ø3/8" y longitudinal Ø5/8", el modo por separación a
-150 mm reproduce las secciones del plano de referencia tal como están dibujadas: C-1
-(L 250×400) 8 barras, C-2 (150×250) 6 barras, C-3 (L 250×450) 10 barras y C-4 (L
-250×800) 14 barras, cada L con sus dos estribos. En modo por número, C-3 sale igual con
-E1 4/4/1 y E2 2/2/1.
+Con recubrimiento 40 mm, estribo Ø3/8" y longitudinal Ø5/8", las secciones del plano
+de referencia salen como están dibujadas con el mínimo general 2/2 y subiendo la
+fila que toca: C-2 (150×250) con F1 = F2 = 3 da 6 barras; C-3 (L 250×450) con F1 = 4
+da 10 barras; C-1 y C-4 igual.
 
 Las barras del mismo diámetro alineadas y equiespaciadas a lo largo de `u` se crean
 como un solo conjunto de Revit (array), igual que si se modelaran a mano.
@@ -143,15 +137,16 @@ lo que no.
   número de estribos, altura y, en rojo, el motivo del rechazo. Cada fila armable
   tiene su **distribución de estribos** y su **separación de longitudinales** propias
   (vacío = valor general). Clic en una fila para verla en los esquemas.
-- **Barras longitudinales**: tipo de las de esquina y de las intermedias, modo por
-  número (general y cuadro por estribo de la columna seleccionada) o por separación,
-  prolongaciones y patilla.
+- **Barras longitudinales**: tipo de las de esquina y de las intermedias, mínimo
+  por fila y por vertical, reparto, cuadro por línea de la columna seleccionada
+  (F1, F2..., V1, V2...), prolongaciones y patilla.
 - **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases.
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
   Partición (`{marca}`, `{id}`, `{tipo}`, `{familia}`, `{conjunto}`, `{estribo}`).
 - **Sección**: hormigón, cada estribo con su color y sus ganchos dibujados con el
-  ángulo del tipo elegido (90°, 135° o 180°; esquema),
+  ángulo del tipo elegido (90°, 135° o 180°; esquema), las etiquetas F1... y V1...
+  de las líneas,
   grapas con sus ganchos y cada barra a su diámetro (rojo oscuro las obligadas,
   naranja las intermedias). Rueda: zoom; arrastrar: mover; doble clic: encajar. Al
   pasar el ratón por una barra o estribo se ve su posición y diámetro.
@@ -168,8 +163,8 @@ Armar avisa de qué falta.
 ```jsonc
 {
   "coverMm": 40,
-  "longitudinal": { "barTypeName": "", "intermediateBarTypeName": "", "mode": "count",
-                    "topCount": 3, "bottomCount": 3, "sideCount": 1, "fillMode": "auto", "maxSpacingMm": 150,
+  "longitudinal": { "barTypeName": "", "intermediateBarTypeName": "",
+                    "rowCount": 3, "colCount": 2, "fillMode": "auto",
                     "bottomExtensionMm": 0, "topExtensionMm": 0, "bottomLegMm": 0, "legDirection": "out" },
   "stirrups":     { "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left",
                     "distribution": "1@50, 5@100, R@250", "symmetric": true, "bottomOffsetMm": 0, "topOffsetMm": 0 },

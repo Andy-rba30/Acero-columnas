@@ -21,29 +21,24 @@ namespace ColumnRebar
 
         /// <summary>Distribucion de estribos propia de este elemento ("" = la de la configuracion).</summary>
         public string DistributionOverride = "";
-        /// <summary>Separacion maxima de longitudinales propia (0 = la de la configuracion).</summary>
-        public double SpacingOverride = 0;
-        /// <summary>Modo por numero: barras de cada estribo de esta columna (indice = rectangulo; null = valores generales).</summary>
-        public List<BarCounts> Counts = new List<BarCounts>();
+        /// <summary>Barras y reparto por fila (de arriba abajo) y por vertical (de izquierda a derecha) de esta columna; null = general.</summary>
+        public List<LineSpec> RowOverrides = new List<LineSpec>();
+        public List<LineSpec> ColOverrides = new List<LineSpec>();
 
-        /// <summary>Valores generales de la configuracion.</summary>
-        public static BarCounts General(AppConfig cfg) =>
-            new BarCounts { Top = cfg.Longitudinal.TopCount, Bottom = cfg.Longitudinal.BottomCount, Side = cfg.Longitudinal.SideCount, Fill = cfg.Longitudinal.FillMode };
+        public List<LineSpec> Overrides(bool horizontal) => horizontal ? RowOverrides : ColOverrides;
 
-        /// <summary>
-        /// Barras del estribo dado: el valor general es el minimo; las propias de la columna
-        /// solo pueden subirlo (si el general sube por encima, manda el general).
-        /// </summary>
-        public BarCounts CountsFor(AppConfig cfg, int stirrup)
+        /// <summary>Eleccion propia de una linea, o null si usa el general.</summary>
+        public LineSpec Own(bool horizontal, int index)
         {
-            BarCounts g = General(cfg);
-            if (stirrup >= Counts.Count || Counts[stirrup] == null) return g;
-            BarCounts own = Counts[stirrup];
-            return new BarCounts
-            {
-                Top = Math.Max(g.Top, own.Top), Bottom = Math.Max(g.Bottom, own.Bottom), Side = Math.Max(g.Side, own.Side),
-                Fill = string.IsNullOrEmpty(own.Fill) ? g.Fill : own.Fill
-            };
+            List<LineSpec> list = Overrides(horizontal);
+            return index < list.Count ? list[index] : null;
+        }
+
+        public void SetOwn(bool horizontal, int index, LineSpec spec)
+        {
+            List<LineSpec> list = Overrides(horizontal);
+            while (list.Count <= index) list.Add(null);
+            list[index] = spec;
         }
 
         public bool CanBuild => Error == null && Section != null;
@@ -54,8 +49,6 @@ namespace ColumnRebar
 
         public string Distribution(AppConfig cfg) =>
             string.IsNullOrWhiteSpace(DistributionOverride) ? cfg.Stirrups.Distribution : DistributionOverride;
-
-        public double MaxSpacingMm(AppConfig cfg) => SpacingOverride > 0 ? SpacingOverride : cfg.Longitudinal.MaxSpacingMm;
 
         public string Partition(AppConfig cfg, string setName, string stirrup)
         {
