@@ -11,7 +11,8 @@
     "maxSpacingMm": 150,
     "bottomExtensionMm": 0,
     "topExtensionMm": 0,
-    "bottomLegMm": 0
+    "bottomLegMm": 0,
+    "legDirection": "out"
   },
 
   "stirrups": {

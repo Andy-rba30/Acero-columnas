@@ -26,11 +26,20 @@ namespace ColumnRebar
         /// <summary>Modo por numero: barras de cada estribo de esta columna (indice = rectangulo; null = valores generales).</summary>
         public List<BarCounts> Counts = new List<BarCounts>();
 
-        /// <summary>Barras del estribo dado: las propias si se editaron, si no las generales.</summary>
+        /// <summary>Valores generales de la configuracion.</summary>
+        public static BarCounts General(AppConfig cfg) =>
+            new BarCounts { Top = cfg.Longitudinal.TopCount, Bottom = cfg.Longitudinal.BottomCount, Side = cfg.Longitudinal.SideCount };
+
+        /// <summary>
+        /// Barras del estribo dado: el valor general es el minimo; las propias de la columna
+        /// solo pueden subirlo (si el general sube por encima, manda el general).
+        /// </summary>
         public BarCounts CountsFor(AppConfig cfg, int stirrup)
         {
-            if (stirrup < Counts.Count && Counts[stirrup] != null) return Counts[stirrup];
-            return new BarCounts { Top = cfg.Longitudinal.TopCount, Bottom = cfg.Longitudinal.BottomCount, Side = cfg.Longitudinal.SideCount };
+            BarCounts g = General(cfg);
+            if (stirrup >= Counts.Count || Counts[stirrup] == null) return g;
+            BarCounts own = Counts[stirrup];
+            return new BarCounts { Top = Math.Max(g.Top, own.Top), Bottom = Math.Max(g.Bottom, own.Bottom), Side = Math.Max(g.Side, own.Side) };
         }
 
         public bool CanBuild => Error == null && Section != null;

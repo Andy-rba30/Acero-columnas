@@ -55,10 +55,13 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
   Ø5/8"). Se reparten de dos formas:
   - **Por número** (por defecto, como en los planos): para cada estribo se escribe el
     total de barras del lado superior, el del inferior (esquinas incluidas) y las
-    intermedias de cada costado. Valores generales en la ventana, y **estribo a
-    estribo para cada columna** en el cuadro de la columna seleccionada. Las
-    intermedias se colocan siempre en los huecos más grandes entre las obligadas, así
-    quedan lo más uniformes posible sin mover las esquinas ni los cruces.
+    intermedias de cada costado. Los valores generales de la ventana son el
+    **mínimo**; en el cuadro de la columna seleccionada se puede **subir** el número
+    estribo a estribo (nunca bajarlo). Las intermedias se colocan siempre en los
+    huecos más grandes entre las obligadas, así quedan lo más uniformes posible sin
+    mover las esquinas ni los cruces; no se añade ninguna que deje menos de 1.5
+    diámetros libres (se avisa), y un lado montado sobre el lado de otro estribo más
+    largo (la cabeza de una L sobre la banda) no añade barras propias.
   - **Por separación máxima**: se añaden las necesarias para no superar
     `maxSpacingMm` (eje a eje). Las de dos lados enfrentados se colocan a la misma
     cota para poder atarlas con grapas.
@@ -99,10 +102,11 @@ si el elemento la incluye).
   **superior** sobresalen esa longitud (anclaje en la cimentación, empalme con el piso
   siguiente). Esas prolongaciones son las únicas partes de barra que pueden estar
   fuera del hormigón de la columna: el resto se comprueba.
-- Con **patilla inferior** llevan una pata horizontal a 90° hacia el centro de la
-  sección. Necesita prolongación inferior mayor que 0: la patilla queda por debajo
-  de la base, dentro de la cimentación (si no, quedaría dentro del hormigón de la
-  columna a ras de la base y se rechazaría). El alzado la dibuja a trazos.
+- Con **patilla inferior** llevan una pata horizontal a 90° hacia fuera de la
+  sección (lo normal en el arranque sobre la zapata) o hacia el centro, a elegir.
+  Necesita prolongación inferior mayor que 0: la patilla queda por debajo de la
+  base, dentro de la cimentación (si no, quedaría dentro del hormigón de la columna
+  a ras de la base y se rechazaría). El alzado la dibuja a trazos.
 
 ## Ganchos
 
@@ -142,7 +146,8 @@ lo que no.
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
   Partición (`{marca}`, `{id}`, `{tipo}`, `{familia}`, `{conjunto}`, `{estribo}`).
-- **Sección**: hormigón, cada estribo con su color y sus ganchos a 135° (esquema),
+- **Sección**: hormigón, cada estribo con su color y sus ganchos dibujados con el
+  ángulo del tipo elegido (90°, 135° o 180°; esquema),
   grapas con sus ganchos y cada barra a su diámetro (rojo oscuro las obligadas,
   naranja las intermedias). Rueda: zoom; arrastrar: mover; doble clic: encajar. Al
   pasar el ratón por una barra o estribo se ve su posición y diámetro.
@@ -161,7 +166,7 @@ Armar avisa de qué falta.
   "coverMm": 40,
   "longitudinal": { "barTypeName": "", "intermediateBarTypeName": "", "mode": "count",
                     "topCount": 3, "bottomCount": 3, "sideCount": 1, "maxSpacingMm": 150,
-                    "bottomExtensionMm": 0, "topExtensionMm": 0, "bottomLegMm": 0 },
+                    "bottomExtensionMm": 0, "topExtensionMm": 0, "bottomLegMm": 0, "legDirection": "out" },
   "stirrups":     { "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left",
                     "distribution": "1@50, 5@100, R@250", "symmetric": true, "bottomOffsetMm": 0, "topOffsetMm": 0 },
   "crossties":    { "enabled": false, "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left", "directions": "both" },

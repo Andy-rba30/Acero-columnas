@@ -25,11 +25,14 @@ namespace ColumnRebar
         private readonly IDictionary<string, double> _diametersMm;
         private readonly Dictionary<string, string> _typeByDisplay = new Dictionary<string, string>();
         private readonly IList<string> _hookTypes;
+        /// <summary>Angulo (grados) de cada tipo de gancho, para el esquema.</summary>
+        private readonly IDictionary<string, double> _hookAngles;
         private readonly IList<HostAnalysis> _items;
 
         /// <summary>Configuracion final si el usuario pulso "Armar"; null si cancelo.</summary>
         public AppConfig Result { get; private set; }
 
+        private ComboBox _longLegDir;
         private ComboBox _longType, _longTypeInter, _stType, _stHook, _stOrient, _tieType, _tieHook, _tieOrient, _tieDir;
         private TextBox _longSpacing, _longBottom, _longTop, _longLeg, _cntTop, _cntBottom, _cntSide;
         private RadioButton _modeSpacing, _modeCount;
@@ -59,8 +62,9 @@ namespace ColumnRebar
         private static readonly Brush SelectedBrush = new SolidColorBrush(Color.FromRgb(0xDC, 0xE8, 0xF6));
 
         public RebarOptionsWindow(AppConfig cfg, IList<string> barTypes, IDictionary<string, double> diametersMm,
-                                  IList<string> hookTypes, IList<HostAnalysis> items)
+                                  IList<string> hookTypes, IDictionary<string, double> hookAngles, IList<HostAnalysis> items)
         {
+            _hookAngles = hookAngles ?? new Dictionary<string, double>();
             _cfg = cfg;
             _cfg.Normalize();
             _diametersMm = diametersMm;
@@ -256,10 +260,19 @@ namespace ColumnRebar
             _longTop = NumBox(_cfg.Longitudinal.TopExtensionMm);
             AddRow(grid, r++, "Prolongacion superior (mm):", _longTop,
                    "Cuanto sobresalen por encima de la coronacion (empalme con el piso siguiente). 0 = terminan en la coronacion.");
+            var legRow = new StackPanel { Orientation = Orientation.Horizontal };
             _longLeg = NumBox(_cfg.Longitudinal.BottomLegMm);
-            AddRow(grid, r++, "Patilla inferior (mm):", _longLeg,
-                   "Patilla horizontal a 90 grados en el extremo inferior, hacia el centro de la seccion. Necesita prolongacion inferior " +
-                   "mayor que 0 (la patilla queda por debajo de la base, dentro de la cimentacion). 0 = sin patilla.");
+            _longLegDir = new ComboBox { Margin = Pad, Width = 150 };
+            _longLegDir.Items.Add("hacia fuera");
+            _longLegDir.Items.Add("hacia el centro");
+            _longLegDir.SelectedIndex = _cfg.Longitudinal.LegOutward ? 0 : 1;
+            legRow.Children.Add(_longLeg);
+            legRow.Children.Add(_longLegDir);
+            Hook(_longLegDir);
+            AddRow(grid, r++, "Patilla inferior (mm):", legRow,
+                   "Patilla horizontal a 90 grados en el extremo inferior, hacia fuera de la seccion (lo normal en el arranque sobre la zapata) " +
+                   "o hacia el centro. Necesita prolongacion inferior mayor que 0 (la patilla queda por debajo de la base, dentro de la " +
+                   "cimentacion). 0 = sin patilla.");
             panel.Children.Add(grid);
 
             // cuadro por estribo de la columna seleccionada (modo por numero)
@@ -301,7 +314,7 @@ namespace ColumnRebar
                     _countsGrid.RowDefinitions.Clear();
                     _countsGrid.ColumnDefinitions.Clear();
                     _countsCaption.Text = item == null ? "Barras por estribo: selecciona una columna armable en la lista"
-                        : "Barras por estribo de " + item.Tag.Trim() + " (vacio = numero general)";
+                        : "Barras por estribo de " + item.Tag.Trim() + " (el numero general es el minimo; aqui solo se puede subir)";
                     if (item == null) return;
                     foreach (double w in new[] { 70, 90, 90, 150, 90 })
                         _countsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
@@ -331,7 +344,8 @@ namespace ColumnRebar
                         {
                             Grid.SetRow(tb, row); Grid.SetColumn(tb, col);
                             _countsGrid.Children.Add(tb);
-                            tb.TextChanged += (sn, e) => { if (!_refreshingCounts) { StoreCounts(item, idx, top, bottom, side); Refresh(); } };
+                            tb.TextChanged += (sn, e) => { if (!_refreshingCounts) { StoreCounts(item, idx, top, bottom, side, ReadConfig(out _)); Refresh(); } };
+                            tb.LostFocus += (sn, e) => Refresh();   // al salir de la casilla se muestra el valor efectivo (nunca menor que el general)
                         }
                         var reset = new Button { Content = "general", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Volver al numero general en este estribo" };
                         reset.Click += (sn, e) => { while (item.Counts.Count <= idx) item.Counts.Add(null); item.Counts[idx] = null; Refresh(); };
@@ -343,8 +357,9 @@ namespace ColumnRebar
                 if (item == null) return;
                 foreach ((int stirrup, TextBox top, TextBox bottom, TextBox side) in _countRows)
                 {
-                    bool own = stirrup < item.Counts.Count && item.Counts[stirrup] != null;
+                    BarCounts g = HostAnalysis.General(scratch);
                     BarCounts n = item.CountsFor(scratch, stirrup);
+                    bool own = n.Top > g.Top || n.Bottom > g.Bottom || n.Side > g.Side;
                     Brush bg = own ? Brushes.LightYellow : Brushes.White;
                     if (!top.IsFocused) top.Text = n.Top.ToString(CultureInfo.InvariantCulture);
                     if (!bottom.IsFocused) bottom.Text = n.Bottom.ToString(CultureInfo.InvariantCulture);
@@ -355,13 +370,15 @@ namespace ColumnRebar
             finally { _refreshingCounts = false; }
         }
 
-        private static void StoreCounts(HostAnalysis item, int stirrup, TextBox top, TextBox bottom, TextBox side)
+        /// <summary>Guarda los valores propios del estribo: nunca por debajo del numero general (que es el minimo).</summary>
+        private static void StoreCounts(HostAnalysis item, int stirrup, TextBox top, TextBox bottom, TextBox side, AppConfig cfg)
         {
             while (item.Counts.Count <= stirrup) item.Counts.Add(null);
-            BarCounts n = item.Counts[stirrup] ?? new BarCounts();
-            if (int.TryParse(top.Text.Trim(), out int t) && t >= 2) n.Top = t;
-            if (int.TryParse(bottom.Text.Trim(), out int b) && b >= 2) n.Bottom = b;
-            if (int.TryParse(side.Text.Trim(), out int sd) && sd >= 0) n.Side = sd;
+            BarCounts g = HostAnalysis.General(cfg);
+            BarCounts n = item.Counts[stirrup] ?? g.Clone();
+            if (int.TryParse(top.Text.Trim(), out int t)) n.Top = Math.Max(g.Top, t);
+            if (int.TryParse(bottom.Text.Trim(), out int b)) n.Bottom = Math.Max(g.Bottom, b);
+            if (int.TryParse(side.Text.Trim(), out int sd)) n.Side = Math.Max(g.Side, sd);
             item.Counts[stirrup] = n;
         }
 
@@ -563,6 +580,15 @@ namespace ColumnRebar
 
         private static string HookOf(ComboBox cb) => cb.SelectedIndex <= 0 ? "" : (string)cb.SelectedItem;
 
+        /// <summary>Angulo en grados del tipo de gancho (0 = sin gancho).</summary>
+        private double HookAngle(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return 0;
+            string match = RebarGenerator.MatchName(_hookTypes, name);
+            if (match != null && _hookAngles.TryGetValue(match, out double deg) && deg > 0) return deg;
+            return 135;
+        }
+
         private static ComboBox OrientCombo(bool left)
         {
             var cb = new ComboBox { Margin = Pad, Width = 140, HorizontalAlignment = HorizontalAlignment.Left };
@@ -596,6 +622,7 @@ namespace ColumnRebar
             c.Longitudinal.BottomExtensionMm = ReadNum(_longBottom, "prolongacion inferior", 0, errors);
             c.Longitudinal.TopExtensionMm = ReadNum(_longTop, "prolongacion superior", 0, errors);
             c.Longitudinal.BottomLegMm = ReadNum(_longLeg, "patilla inferior", 0, errors);
+            c.Longitudinal.LegDirection = _longLegDir.SelectedIndex == 1 ? "in" : "out";
 
             c.Stirrups.BarTypeName = TypeOf(_stType);
             c.Stirrups.HookTypeName = HookOf(_stHook);
@@ -707,9 +734,9 @@ namespace ColumnRebar
                 ItemStatus(_selected, scratch, dbDraw, dbiDraw, dsDraw, dtDraw, out string text, out ColumnPlan plan, out List<StirrupRun> runs);
                 _previewCaption.Text = _selected.Tag + _selected.Section.Describe() +
                                        (db <= 0 || ds <= 0 ? "  (sin tipo de barra elegido: diametros orientativos)" : "");
-                bool hooks = !string.IsNullOrEmpty(scratch.Stirrups.HookTypeName);
-                bool tieHooks = tiesEnabled && !string.IsNullOrEmpty(scratch.Crossties.HookTypeName);
-                if (plan != null) _preview.Show(_selected.Section, plan, hooks, tieHooks); else _preview.Clear(text);
+                double hookDeg = HookAngle(scratch.Stirrups.HookTypeName);
+                double tieHookDeg = tiesEnabled ? HookAngle(scratch.Crossties.HookTypeName) : 0;
+                if (plan != null) _preview.Show(_selected.Section, plan, hookDeg, tieHookDeg); else _preview.Clear(text);
                 if (runs != null) _elevation.Show(_selected.Section, plan, runs, scratch); else _elevation.Clear(text);
                 _partitionPreview.Text = "Ejemplo: " + _selected.Partition(scratch, "estribo", "1");
             }

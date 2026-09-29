@@ -130,6 +130,8 @@ namespace ColumnRebar
                 c.Result.Warnings.Add("la patilla inferior se ignora porque las barras no sobresalen por debajo de la base");
             if (zTop - zBot < MinSeg) { c.Result.Rejected.Add("longitudinales sin longitud"); return; }
             Pt centroid = Rectilinear.Centroid(s.Polygon);
+            // patilla hacia fuera (lo normal en el arranque) o hacia el centro de la seccion
+            double sign = L.LegOutward ? -1 : 1;
 
             foreach ((Pt first, int count, double step, bool required) in c.Plan.Rows(c.Tol))
             {
@@ -139,13 +141,13 @@ namespace ColumnRebar
                 if (count > 1)
                 {
                     normal = s.DirU;
-                    if (leg > 0) legDir = s.DirV * (centroid.V >= first.V ? 1 : -1);
+                    if (leg > 0) legDir = s.DirV * (sign * (centroid.V >= first.V ? 1 : -1));
                 }
                 else
                 {
                     double du = centroid.U - first.U, dv = centroid.V - first.V;
-                    if (leg > 0 && Math.Abs(du) > Math.Abs(dv)) { legDir = s.DirU * (du >= 0 ? 1 : -1); normal = s.DirV; }
-                    else { if (leg > 0) legDir = s.DirV * (dv >= 0 ? 1 : -1); normal = s.DirU; }
+                    if (leg > 0 && Math.Abs(du) > Math.Abs(dv)) { legDir = s.DirU * (sign * (du >= 0 ? 1 : -1)); normal = s.DirV; }
+                    else { if (leg > 0) legDir = s.DirV * (sign * (dv >= 0 ? 1 : -1)); normal = s.DirU; }
                 }
 
                 XYZ bottom = s.World(first.U, first.V, zBot);

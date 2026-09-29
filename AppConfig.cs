@@ -38,8 +38,12 @@ namespace ColumnRebar
         public double BottomExtensionMm { get; set; } = 0;
         /// <summary>Prolongacion por encima de la coronacion (mm, empalme con el piso siguiente). 0 = terminan en la coronacion.</summary>
         public double TopExtensionMm { get; set; } = 0;
-        /// <summary>Patilla horizontal a 90 grados en el extremo inferior, hacia el centro de la seccion (mm). 0 = sin patilla. Solo tiene sentido con prolongacion inferior.</summary>
+        /// <summary>Patilla horizontal a 90 grados en el extremo inferior (mm). 0 = sin patilla. Solo tiene sentido con prolongacion inferior.</summary>
         public double BottomLegMm { get; set; } = 0;
+        /// <summary>"out" = la patilla apunta hacia fuera de la seccion (lo normal en el arranque sobre la zapata); "in" = hacia el centro.</summary>
+        public string LegDirection { get; set; } = "out";
+        [JsonIgnore]
+        public bool LegOutward => !string.Equals((LegDirection ?? "").Trim(), "in", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Estribos cerrados (uno por rectangulo maximo de la seccion).</summary>
@@ -120,6 +124,7 @@ namespace ColumnRebar
             if (Longitudinal.BarTypeName == null) Longitudinal.BarTypeName = "";
             if (Longitudinal.IntermediateBarTypeName == null) Longitudinal.IntermediateBarTypeName = "";
             Longitudinal.Mode = Longitudinal.ByCount ? "count" : "spacing";
+            Longitudinal.LegDirection = Longitudinal.LegOutward ? "out" : "in";
             if (Longitudinal.TopCount < 2) Longitudinal.TopCount = 2;
             if (Longitudinal.BottomCount < 2) Longitudinal.BottomCount = 2;
             if (Longitudinal.SideCount < 0) Longitudinal.SideCount = 0;

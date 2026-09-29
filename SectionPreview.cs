@@ -20,7 +20,8 @@ namespace ColumnRebar
     {
         private ColumnSection _s;
         private ColumnPlan _plan;
-        private bool _hooks, _tieHooks;
+        /// <summary>Angulo (grados) de los ganchos de estribos y grapas; 0 = sin gancho.</summary>
+        private double _hookDeg, _tieHookDeg;
         private string _message = "Sin elemento armable";
 
         private double _zoom = 1;
@@ -60,12 +61,12 @@ namespace ColumnRebar
             Cursor = Cursors.Hand;
         }
 
-        /// <param name="hooks">Dibujar los ganchos a 135 grados de los estribos (esquema).</param>
-        /// <param name="tieHooks">Dibujar los ganchos de las grapas.</param>
-        public void Show(ColumnSection s, ColumnPlan plan, bool hooks, bool tieHooks)
+        /// <param name="hookDeg">Angulo del gancho de los estribos en grados (90, 135, 180); 0 = sin gancho.</param>
+        /// <param name="tieHookDeg">Idem para las grapas.</param>
+        public void Show(ColumnSection s, ColumnPlan plan, double hookDeg, double tieHookDeg)
         {
             bool changed = !ReferenceEquals(_s, s);
-            _s = s; _plan = plan; _hooks = hooks; _tieHooks = tieHooks;
+            _s = s; _plan = plan; _hookDeg = hookDeg; _tieHookDeg = tieHookDeg;
             if (changed) ResetView(); else Redraw();
         }
 
@@ -170,17 +171,18 @@ namespace ColumnRebar
                 Children.Add(r);
                 Text("E" + (st.Index + 1), X(st.Line.CU) - 8, Y(st.Line.V2) - 16 + st.Index * 12, b, 11, true);
 
-                // ganchos a 135 grados en la esquina superior izquierda (donde empieza y acaba el estribo):
-                // cada extremo sigue su lado, dobla hacia el interior y acaba a 45 grados hacia el nucleo
-                if (_hooks)
+                // ganchos en la esquina superior izquierda (donde empieza y acaba el estribo). El
+                // estribo sale de esa esquina hacia abajo y vuelve a ella por el lado superior; cada
+                // extremo dobla el angulo del tipo de gancho hacia el interior.
+                if (_hookDeg > 0)
                 {
-                    double hook = Math.Max(6 * _plan.Ds, 75 / FtToMm);   // longitud de la pata (6 diametros, minimo 75 mm)
-                    double gap = 1.2 * _plan.Ds;                          // las dos patas van una junto a otra
+                    double hook = Math.Max(6 * _plan.Ds, 75 / FtToMm);   // pata (6 diametros, minimo 75 mm)
+                    double gap = 1.2 * _plan.Ds;
                     Pt c = new Pt(st.Line.U1, st.Line.V2);
-                    // extremo que llega por el lado superior: dobla hacia abajo-derecha
-                    Hook(X, Y, new Pt(c.U + gap, c.V), new Pt(c.U + gap + hook * 0.7071, c.V - hook * 0.7071), b, th);
-                    // extremo que llega por el lado izquierdo: dobla hacia abajo-derecha, un poco mas abajo
-                    Hook(X, Y, new Pt(c.U, c.V - gap), new Pt(c.U + hook * 0.7071, c.V - gap - hook * 0.7071), b, th);
+                    // extremo final: llega por el lado superior hacia la izquierda (d = -u), interior = -v
+                    HookLeg(X, Y, new Pt(c.U, c.V - gap), -1, 0, 0, -1, _hookDeg, hook, b, th);
+                    // extremo inicial: sale hacia abajo, es decir "llega" desde abajo (d = +v), interior = +u
+                    HookLeg(X, Y, new Pt(c.U + gap, c.V), 0, 1, 1, 0, _hookDeg, hook, b, th);
                 }
             }
 
@@ -194,10 +196,9 @@ namespace ColumnRebar
                     ToolTip = "Grapa (estribo " + (t.Stirrup + 1) + ")"
                 };
                 Children.Add(ln);
-                if (_tieHooks)
+                if (_tieHookDeg > 0)
                 {
-                    // gancho a 135 grados en cada extremo: vuelve hacia dentro a 45 grados
-                    double hook = Math.Max(6 * _plan.Dt, 75 / FtToMm) * 0.7071;
+                    double hook = Math.Max(6 * _plan.Dt, 75 / FtToMm);
                     double du = t.B.U - t.A.U, dv = t.B.V - t.A.V;
                     double len = Math.Sqrt(du * du + dv * dv);
                     if (len > 1e-9)
@@ -208,8 +209,9 @@ namespace ColumnRebar
                         double pu = -dv, pv = du;
                         double mu = 0.5 * (t.A.U + t.B.U), mv = 0.5 * (t.A.V + t.B.V);
                         if ((st.Line.CU - mu) * pu + (st.Line.CV - mv) * pv < 0) { pu = -pu; pv = -pv; }
-                        Hook(X, Y, t.A, new Pt(t.A.U + (du + pu) * hook, t.A.V + (dv + pv) * hook), TieBrush, Math.Max(1.2, _plan.Dt * k));
-                        Hook(X, Y, t.B, new Pt(t.B.U + (-du + pu) * hook, t.B.V + (-dv + pv) * hook), TieBrush, Math.Max(1.2, _plan.Dt * k));
+                        double thick = Math.Max(1.2, _plan.Dt * k);
+                        HookLeg(X, Y, t.B, du, dv, pu, pv, _tieHookDeg, hook, TieBrush, thick);      // extremo B: la barra llega en direccion d
+                        HookLeg(X, Y, t.A, -du, -dv, pu, pv, _tieHookDeg, hook, TieBrush, thick);    // extremo A: llega en direccion -d
                     }
                 }
             }
@@ -231,6 +233,21 @@ namespace ColumnRebar
             // resumen
             Text(_plan.Describe() + " | " + _plan.DescribeCounts() + " (arriba/abajo/intermedias por costado)", 8, H - 20, Brushes.DimGray, 11);
             if (_plan.Warnings.Count > 0) Text(string.Join(" | ", _plan.Warnings), 8, H - 36, Brushes.Firebrick, 11);
+        }
+
+        /// <summary>
+        /// Pata de un gancho en el punto "at": la barra llega con direccion (du, dv) y dobla
+        /// "deg" grados hacia el interior (nu, nv): 90 = la pata sigue el interior, 135 = a 45
+        /// grados hacia el nucleo, 180 = vuelve sobre la barra (separada un diametro).
+        /// </summary>
+        private void HookLeg(Func<double, double> X, Func<double, double> Y, Pt at, double du, double dv, double nu, double nv,
+                             double deg, double len, Brush brush, double thickness)
+        {
+            double a = deg * Math.PI / 180;
+            double lu = Math.Cos(a) * du + Math.Sin(a) * nu, lv = Math.Cos(a) * dv + Math.Sin(a) * nv;
+            Pt from = at;
+            if (deg >= 170) from = new Pt(at.U + nu * 1.5 * _plan.Ds, at.V + nv * 1.5 * _plan.Ds);   // el pliegue de un gancho a 180 deja la pata por dentro
+            Hook(X, Y, from, new Pt(from.U + lu * len, from.V + lv * len), brush, thickness);
         }
 
         private void Hook(Func<double, double> X, Func<double, double> Y, Pt from, Pt to, Brush brush, double thickness)

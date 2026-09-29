@@ -47,13 +47,22 @@ namespace ColumnRebar
                 message = "El proyecto no tiene ningun tipo de barra (RebarBarType). Carga una familia de armadura primero.";
                 return Result.Failed;
             }
-            List<string> hookTypes = RebarGenerator.AllHookTypes(doc).Select(h => h.Name).ToList();
+            var allHooks = RebarGenerator.AllHookTypes(doc);
+            List<string> hookTypes = allHooks.Select(h => h.Name).ToList();
+            // angulo de cada gancho (grados) para dibujarlo en el esquema de la seccion
+            var hookAngles = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (RebarHookType h in allHooks)
+            {
+                double deg = 135;
+                try { deg = Math.Round(h.HookAngle * 180 / Math.PI); } catch { }
+                hookAngles[h.Name] = deg;
+            }
 
             // --- 1. Analisis geometrico de cada elemento (solo lectura, sin transaccion) ---
             var items = hosts.Select(h => HostAnalysis.Analyze(doc, h, cfg)).ToList();
 
             // --- 2. Interfaz: el usuario revisa que se ha detectado y elige el armado ---
-            var win = new RebarOptionsWindow(cfg.Clone(), barTypes, diametersMm, hookTypes, items);
+            var win = new RebarOptionsWindow(cfg.Clone(), barTypes, diametersMm, hookTypes, hookAngles, items);
             try { new WindowInteropHelper(win).Owner = commandData.Application.MainWindowHandle; } catch { }
             bool? ok = win.ShowDialog();
             if (ok != true || win.Result == null) return Result.Cancelled;

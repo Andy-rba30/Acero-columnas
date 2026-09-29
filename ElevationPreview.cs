@@ -82,10 +82,10 @@ namespace ColumnRebar
                 foreach (double u in new[] { uMin, uMax })
                 {
                     double x = x0 + u * scale;
-                    // patilla a 90 grados en la base, hacia el centro de la seccion
+                    // patilla a 90 grados en la base, hacia fuera (o hacia el centro si asi se pide)
                     if (leg > 0)
                     {
-                        double dir = u < 0.5 * _s.Width ? 1 : -1;
+                        double dir = (u < 0.5 * _s.Width ? 1 : -1) * (_cfg.Longitudinal.LegOutward ? -1 : 1);
                         Children.Add(new Line { X1 = x, Y1 = Y(-ext0), X2 = x + dir * leg * scale, Y2 = Y(-ext0), Stroke = SectionPreview.RequiredBrush, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 3, 2 } });
                     }
                     Children.Add(new Line { X1 = x, Y1 = Y(0), X2 = x, Y2 = Y(_s.Height), Stroke = SectionPreview.RequiredBrush, StrokeThickness = 2 });
