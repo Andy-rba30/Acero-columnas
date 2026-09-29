@@ -28,7 +28,7 @@ namespace ColumnRebar
 
         /// <summary>Valores generales de la configuracion.</summary>
         public static BarCounts General(AppConfig cfg) =>
-            new BarCounts { Top = cfg.Longitudinal.TopCount, Bottom = cfg.Longitudinal.BottomCount, Side = cfg.Longitudinal.SideCount };
+            new BarCounts { Top = cfg.Longitudinal.TopCount, Bottom = cfg.Longitudinal.BottomCount, Side = cfg.Longitudinal.SideCount, Fill = cfg.Longitudinal.FillMode };
 
         /// <summary>
         /// Barras del estribo dado: el valor general es el minimo; las propias de la columna
@@ -39,7 +39,11 @@ namespace ColumnRebar
             BarCounts g = General(cfg);
             if (stirrup >= Counts.Count || Counts[stirrup] == null) return g;
             BarCounts own = Counts[stirrup];
-            return new BarCounts { Top = Math.Max(g.Top, own.Top), Bottom = Math.Max(g.Bottom, own.Bottom), Side = Math.Max(g.Side, own.Side) };
+            return new BarCounts
+            {
+                Top = Math.Max(g.Top, own.Top), Bottom = Math.Max(g.Bottom, own.Bottom), Side = Math.Max(g.Side, own.Side),
+                Fill = string.IsNullOrEmpty(own.Fill) ? g.Fill : own.Fill
+            };
         }
 
         public bool CanBuild => Error == null && Section != null;

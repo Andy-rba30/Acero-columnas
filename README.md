@@ -60,8 +60,12 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
     estribo a estribo (nunca bajarlo). Las intermedias se colocan siempre en los
     huecos más grandes entre las obligadas, así quedan lo más uniformes posible sin
     mover las esquinas ni los cruces; no se añade ninguna que deje menos de 1.5
-    diámetros libres (se avisa), y un lado montado sobre el lado de otro estribo más
-    largo (la cabeza de una L sobre la banda) no añade barras propias.
+    diámetros libres (se avisa). Los estribos se recorren en orden (E1, E2...): en
+    un lado compartido, las barras que ya puso E1 cuentan para E2, así manda el
+    primero. Cuando otro estribo parte el lado (la esquina interior de una L), el
+    **reparto** dice dónde van las añadidas: al hueco más grande, hacia la
+    izquierda, hacia la derecha o simétrico (alternando; en los costados izquierda
+    es abajo y derecha es arriba). También se cambia estribo a estribo.
   - **Por separación máxima**: se añaden las necesarias para no superar
     `maxSpacingMm` (eje a eje). Las de dos lados enfrentados se colocan a la misma
     cota para poder atarlas con grapas.
@@ -165,7 +169,7 @@ Armar avisa de qué falta.
 {
   "coverMm": 40,
   "longitudinal": { "barTypeName": "", "intermediateBarTypeName": "", "mode": "count",
-                    "topCount": 3, "bottomCount": 3, "sideCount": 1, "maxSpacingMm": 150,
+                    "topCount": 3, "bottomCount": 3, "sideCount": 1, "fillMode": "auto", "maxSpacingMm": 150,
                     "bottomExtensionMm": 0, "topExtensionMm": 0, "bottomLegMm": 0, "legDirection": "out" },
   "stirrups":     { "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left",
                     "distribution": "1@50, 5@100, R@250", "symmetric": true, "bottomOffsetMm": 0, "topOffsetMm": 0 },

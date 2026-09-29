@@ -32,14 +32,16 @@ namespace ColumnRebar
         /// <summary>Configuracion final si el usuario pulso "Armar"; null si cancelo.</summary>
         public AppConfig Result { get; private set; }
 
-        private ComboBox _longLegDir;
+        private ComboBox _longLegDir, _fillMode;
         private ComboBox _longType, _longTypeInter, _stType, _stHook, _stOrient, _tieType, _tieHook, _tieOrient, _tieDir;
         private TextBox _longSpacing, _longBottom, _longTop, _longLeg, _cntTop, _cntBottom, _cntSide;
         private RadioButton _modeSpacing, _modeCount;
         private Grid _countsGrid;
         private TextBlock _countsCaption;
         /// <summary>Filas del cuadro de barras por estribo de la columna seleccionada.</summary>
-        private readonly List<(int stirrup, TextBox top, TextBox bottom, TextBox side)> _countRows = new List<(int, TextBox, TextBox, TextBox)>();
+        private readonly List<(int stirrup, TextBox top, TextBox bottom, TextBox side, ComboBox fill)> _countRows = new List<(int, TextBox, TextBox, TextBox, ComboBox)>();
+        private static readonly string[] FillModes = { "auto", "left", "right", "center" };
+        private static readonly string[] FillLabels = { "huecos mas grandes", "hacia la izquierda", "hacia la derecha", "simetrico" };
         private HostAnalysis _countsFor;
         private bool _refreshingCounts;
         private TextBox _stDist, _stBottomOff, _stTopOff, _cover, _partition;
@@ -247,9 +249,15 @@ namespace ColumnRebar
             cntRow.Children.Add(new TextBlock { Text = "intermedias por costado", Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
             cntRow.Children.Add(_cntSide);
             AddRow(grid, r++, "Numero general por estribo:", cntRow,
-                   "Valores para todos los estribos de todas las columnas: barras en el lado superior y en el inferior (esquinas incluidas) " +
-                   "e intermedias en cada costado (sin contar las esquinas). Abajo se pueden cambiar estribo a estribo para la columna seleccionada.");
+                   "Minimo para todos los estribos de todas las columnas: barras en el lado superior y en el inferior (esquinas incluidas) " +
+                   "e intermedias en cada costado (sin contar las esquinas; los cruces con otros estribos cuentan como intermedias). " +
+                   "Abajo se puede subir estribo a estribo para la columna seleccionada.");
             Hook(_cntTop); Hook(_cntBottom); Hook(_cntSide);
+            _fillMode = FillCombo(_cfg.Longitudinal.FillMode, false);
+            AddRow(grid, r++, "Reparto de las anadidas:", _fillMode,
+                   "Cuando otro estribo parte el lado (la esquina interior de una L, el alma de una T), donde van las barras que se anaden: " +
+                   "al hueco mas grande, al de la izquierda, al de la derecha, o simetrico (alternando izquierda y derecha; el central primero " +
+                   "si lo hay). En los costados, izquierda = abajo y derecha = arriba. Cambiable estribo a estribo en el cuadro de abajo.");
 
             _longSpacing = NumBox(_cfg.Longitudinal.MaxSpacingMm);
             AddRow(grid, r++, "Separacion maxima (mm):", _longSpacing,
@@ -286,6 +294,23 @@ namespace ColumnRebar
 
         private static TextBox CountBox(int v) => new TextBox { Text = v.ToString(CultureInfo.InvariantCulture), Width = 40, Margin = Pad };
 
+        private ComboBox FillCombo(string mode, bool withGeneral)
+        {
+            var cb = new ComboBox { Margin = Pad, Width = withGeneral ? 150 : 170, HorizontalAlignment = HorizontalAlignment.Left };
+            if (withGeneral) cb.Items.Add("(general)");
+            foreach (string l in FillLabels) cb.Items.Add(l);
+            int idx = Array.IndexOf(FillModes, (mode ?? "").Trim().ToLowerInvariant());
+            cb.SelectedIndex = withGeneral ? (idx < 0 ? 0 : idx + 1) : Math.Max(0, idx);
+            if (!withGeneral) Hook(cb);
+            return cb;
+        }
+
+        private static string FillOf(ComboBox cb, bool withGeneral)
+        {
+            int i = withGeneral ? cb.SelectedIndex - 1 : cb.SelectedIndex;
+            return i < 0 || i >= FillModes.Length ? "" : FillModes[i];
+        }
+
         /// <summary>
         /// Reconstruye (si cambia la columna o su numero de estribos) o actualiza el cuadro
         /// "barras por estribo" de la columna seleccionada. Las casillas no editadas muestran
@@ -316,10 +341,10 @@ namespace ColumnRebar
                     _countsCaption.Text = item == null ? "Barras por estribo: selecciona una columna armable en la lista"
                         : "Barras por estribo de " + item.Tag.Trim() + " (el numero general es el minimo; aqui solo se puede subir)";
                     if (item == null) return;
-                    foreach (double w in new[] { 70, 90, 90, 150, 90 })
+                    foreach (double w in new[] { 60, 80, 80, 140, 160, 70 })
                         _countsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
                     _countsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                    string[] heads = { "Estribo", "arriba (total)", "abajo (total)", "intermedias por costado", "" };
+                    string[] heads = { "Estribo", "arriba (total)", "abajo (total)", "intermedias por costado", "reparto", "" };
                     for (int c = 0; c < heads.Length; c++)
                     {
                         var h = new TextBlock { Text = heads[c], Foreground = Brushes.DimGray, Margin = Pad };
@@ -340,30 +365,37 @@ namespace ColumnRebar
                         Grid.SetRow(lb, row); Grid.SetColumn(lb, 0);
                         _countsGrid.Children.Add(lb);
                         TextBox top = CountBox(0), bottom = CountBox(0), side = CountBox(0);
+                        ComboBox fill = FillCombo("", true);
                         foreach ((TextBox tb, int col) in new[] { (top, 1), (bottom, 2), (side, 3) })
                         {
                             Grid.SetRow(tb, row); Grid.SetColumn(tb, col);
                             _countsGrid.Children.Add(tb);
-                            tb.TextChanged += (sn, e) => { if (!_refreshingCounts) { StoreCounts(item, idx, top, bottom, side, ReadConfig(out _)); Refresh(); } };
+                            tb.TextChanged += (sn, e) => { if (!_refreshingCounts) { StoreCounts(item, idx, top, bottom, side, fill, ReadConfig(out _)); Refresh(); } };
                             tb.LostFocus += (sn, e) => Refresh();   // al salir de la casilla se muestra el valor efectivo (nunca menor que el general)
                         }
-                        var reset = new Button { Content = "general", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Volver al numero general en este estribo" };
+                        Grid.SetRow(fill, row); Grid.SetColumn(fill, 4);
+                        _countsGrid.Children.Add(fill);
+                        fill.SelectionChanged += (sn, e) => { if (!_refreshingCounts) { StoreCounts(item, idx, top, bottom, side, fill, ReadConfig(out _)); Refresh(); } };
+                        var reset = new Button { Content = "general", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Volver al numero y reparto generales en este estribo" };
                         reset.Click += (sn, e) => { while (item.Counts.Count <= idx) item.Counts.Add(null); item.Counts[idx] = null; Refresh(); };
-                        Grid.SetRow(reset, row); Grid.SetColumn(reset, 4);
+                        Grid.SetRow(reset, row); Grid.SetColumn(reset, 5);
                         _countsGrid.Children.Add(reset);
-                        _countRows.Add((i, top, bottom, side));
+                        _countRows.Add((i, top, bottom, side, fill));
                     }
                 }
                 if (item == null) return;
-                foreach ((int stirrup, TextBox top, TextBox bottom, TextBox side) in _countRows)
+                foreach ((int stirrup, TextBox top, TextBox bottom, TextBox side, ComboBox fill) in _countRows)
                 {
                     BarCounts g = HostAnalysis.General(scratch);
                     BarCounts n = item.CountsFor(scratch, stirrup);
-                    bool own = n.Top > g.Top || n.Bottom > g.Bottom || n.Side > g.Side;
+                    BarCounts ownCounts = stirrup < item.Counts.Count ? item.Counts[stirrup] : null;
+                    bool own = n.Top > g.Top || n.Bottom > g.Bottom || n.Side > g.Side || !string.IsNullOrEmpty(ownCounts?.Fill);
                     Brush bg = own ? Brushes.LightYellow : Brushes.White;
                     if (!top.IsFocused) top.Text = n.Top.ToString(CultureInfo.InvariantCulture);
                     if (!bottom.IsFocused) bottom.Text = n.Bottom.ToString(CultureInfo.InvariantCulture);
                     if (!side.IsFocused) side.Text = n.Side.ToString(CultureInfo.InvariantCulture);
+                    int fi = Array.IndexOf(FillModes, ownCounts?.Fill ?? "");
+                    fill.SelectedIndex = fi < 0 ? 0 : fi + 1;
                     top.Background = bg; bottom.Background = bg; side.Background = bg;
                 }
             }
@@ -371,14 +403,15 @@ namespace ColumnRebar
         }
 
         /// <summary>Guarda los valores propios del estribo: nunca por debajo del numero general (que es el minimo).</summary>
-        private static void StoreCounts(HostAnalysis item, int stirrup, TextBox top, TextBox bottom, TextBox side, AppConfig cfg)
+        private static void StoreCounts(HostAnalysis item, int stirrup, TextBox top, TextBox bottom, TextBox side, ComboBox fill, AppConfig cfg)
         {
             while (item.Counts.Count <= stirrup) item.Counts.Add(null);
             BarCounts g = HostAnalysis.General(cfg);
-            BarCounts n = item.Counts[stirrup] ?? g.Clone();
+            BarCounts n = item.Counts[stirrup] ?? new BarCounts { Top = g.Top, Bottom = g.Bottom, Side = g.Side, Fill = "" };
             if (int.TryParse(top.Text.Trim(), out int t)) n.Top = Math.Max(g.Top, t);
             if (int.TryParse(bottom.Text.Trim(), out int b)) n.Bottom = Math.Max(g.Bottom, b);
             if (int.TryParse(side.Text.Trim(), out int sd)) n.Side = Math.Max(g.Side, sd);
+            n.Fill = FillOf(fill, true);
             item.Counts[stirrup] = n;
         }
 
@@ -618,6 +651,7 @@ namespace ColumnRebar
             c.Longitudinal.TopCount = ReadInt(_cntTop, "barras arriba", 2, errors);
             c.Longitudinal.BottomCount = ReadInt(_cntBottom, "barras abajo", 2, errors);
             c.Longitudinal.SideCount = ReadInt(_cntSide, "intermedias por costado", 0, errors);
+            c.Longitudinal.FillMode = FillOf(_fillMode, false);
             c.Longitudinal.MaxSpacingMm = ReadNum(_longSpacing, "separacion maxima", 1, errors);
             c.Longitudinal.BottomExtensionMm = ReadNum(_longBottom, "prolongacion inferior", 0, errors);
             c.Longitudinal.TopExtensionMm = ReadNum(_longTop, "prolongacion superior", 0, errors);

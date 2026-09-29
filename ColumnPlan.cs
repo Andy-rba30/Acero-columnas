@@ -44,7 +44,14 @@ namespace ColumnRebar
     public sealed class BarCounts
     {
         public int Top = 3, Bottom = 3, Side = 1;
-        public BarCounts Clone() => new BarCounts { Top = Top, Bottom = Bottom, Side = Side };
+        /// <summary>
+        /// Donde van las barras que se anaden cuando el lado esta partido por otro estribo:
+        /// "auto" = al hueco mas grande; "left" = al hueco de la izquierda (en los costados,
+        /// el de abajo); "right" = al de la derecha (arriba); "center" = simetrico, alternando
+        /// izquierda y derecha (o el hueco central primero). "" = el general.
+        /// </summary>
+        public string Fill = "";
+        public BarCounts Clone() => new BarCounts { Top = Top, Bottom = Bottom, Side = Side, Fill = Fill };
         public override string ToString() => Top + "/" + Bottom + "/" + Side;
     }
 
@@ -213,14 +220,14 @@ namespace ColumnRebar
                     if (o.ByCount)
                     {
                         // arriba/abajo: total de barras en el lado; costados: 2 esquinas + intermedias (los cruces
-                        // con otros estribos cuentan como intermedias). Un lado que va montado sobre el lado de otro
-                        // estribo mas largo (la cabeza de una L sobre la banda, el alma de una T bajo el ala) no
-                        // anade barras propias: las pone el estribo que lo abarca.
-                        int want1 = plan.OwnedByOther(s, e1) ? 0 : e1 == 0 ? n.Bottom : 2 + Math.Max(0, n.Side);
-                        int want2 = plan.OwnedByOther(s, e2) ? 0 : e2 == 1 ? n.Top : 2 + Math.Max(0, n.Side);
+                        // con otros estribos cuentan como intermedias). Los estribos se recorren en orden (E1, E2...):
+                        // las barras que ya puso un estribo anterior sobre el mismo lado cuentan para este, asi
+                        // en un lado compartido manda el primero.
+                        int want1 = e1 == 0 ? n.Bottom : 2 + Math.Max(0, n.Side);
+                        int want2 = e2 == 1 ? n.Top : 2 + Math.Max(0, n.Side);
                         double minSp = 2.5 * o.DbInter;   // 1.5 diametros libres entre barras
-                        add1 = FillByCount(Rectilinear.Cluster(f1, tol), want1 - f1.Count, minSp, out int miss1);
-                        add2 = FillByCount(Rectilinear.Cluster(f2, tol), want2 - f2.Count, minSp, out int miss2);
+                        add1 = FillByCount(Rectilinear.Cluster(f1, tol), want1 - f1.Count, minSp, n.Fill, out int miss1);
+                        add2 = FillByCount(Rectilinear.Cluster(f2, tol), want2 - f2.Count, minSp, n.Fill, out int miss2);
                         if (miss1 > 0) plan.Warnings.Add("E" + (s.Index + 1) + " " + EdgeName(e1) + ": no caben " + miss1 + " barra(s) mas con 1.5 diametros libres");
                         if (miss2 > 0) plan.Warnings.Add("E" + (s.Index + 1) + " " + EdgeName(e2) + ": no caben " + miss2 + " barra(s) mas con 1.5 diametros libres");
                     }
@@ -286,57 +293,72 @@ namespace ColumnRebar
         private static string EdgeName(int edge) => edge == 0 ? "abajo" : edge == 1 ? "arriba" : edge == 2 ? "costado izquierdo" : "costado derecho";
 
         /// <summary>
-        /// Reparte "count" barras nuevas entre las posiciones fijas: cada una va al hueco que
-        /// tenga la separacion resultante mas grande, asi quedan lo mas uniformes posible sin
-        /// mover las obligadas. No se anade ninguna que deje una separacion menor que
-        /// "minSpacing" (eje a eje); "missing" dice cuantas se han quedado sin colocar.
-        /// Devuelve solo las nuevas.
+        /// Reparte "count" barras nuevas entre las posiciones fijas segun "mode":
+        ///  "auto"   = cada una al hueco con la separacion resultante mas grande (lo mas uniforme posible);
+        ///  "left"   = al primer hueco empezando por la izquierda (abajo en los costados) que la admita;
+        ///  "right"  = idem empezando por la derecha (arriba);
+        ///  "center" = simetrico: por pares izquierda-derecha, el par mas cercano al centro primero; el hueco central al final.
+        /// No se anade ninguna que deje una separacion menor que "minSpacing" (eje a eje);
+        /// "missing" dice cuantas se han quedado sin colocar. Devuelve solo las nuevas.
         /// </summary>
-        private static List<double> FillByCount(List<double> sorted, int count, double minSpacing, out int missing)
+        private static List<double> FillByCount(List<double> sorted, int count, double minSpacing, string mode, out int missing)
         {
             var added = new List<double>();
             missing = 0;
             if (count <= 0 || sorted.Count < 2) { missing = Math.Max(0, count); return added; }
-            var perGap = new int[sorted.Count - 1];   // barras nuevas en cada hueco
+            int n = sorted.Count - 1;
+            var perGap = new int[n];   // barras nuevas en cada hueco
+            string m = (mode ?? "").Trim().ToLowerInvariant();
+
+            // orden de preferencia de los huecos (null = por separacion)
+            List<int> order = null;
+            if (m == "left") order = Enumerable.Range(0, n).ToList();
+            else if (m == "right") order = Enumerable.Range(0, n).Reverse().ToList();
+            else if (m == "center")
+            {
+                // por pares simetricos (izquierda y despues derecha), el par mas cercano al centro
+                // primero; el hueco central, si lo hay, queda para el final
+                order = Enumerable.Range(0, n).Where(i => 2 * i != n - 1)
+                                  .OrderBy(i => Math.Abs(2 * i - (n - 1))).ThenBy(i => i).ToList();
+                if (n % 2 == 1) order.Add((n - 1) / 2);
+            }
+
             for (int k = 0; k < count; k++)
             {
                 int best = -1;
-                double bestSp = -1;
-                for (int i = 0; i < perGap.Length; i++)
+                if (order == null)
                 {
-                    double sp = (sorted[i + 1] - sorted[i]) / (perGap[i] + 2);   // separacion si se anade una mas
-                    if (sp >= minSpacing && sp > bestSp) { bestSp = sp; best = i; }
+                    double bestSp = -1;
+                    for (int i = 0; i < n; i++)
+                    {
+                        double sp = (sorted[i + 1] - sorted[i]) / (perGap[i] + 2);   // separacion si se anade una mas
+                        if (sp >= minSpacing && sp > bestSp) { bestSp = sp; best = i; }
+                    }
+                }
+                else if (m == "center")
+                {
+                    // la k-esima barra va al k-esimo hueco del orden simetrico; si no cabe, al siguiente
+                    for (int t = 0; t < n && best < 0; t++)
+                    {
+                        int i = order[(k + t) % n];
+                        if ((sorted[i + 1] - sorted[i]) / (perGap[i] + 2) >= minSpacing) best = i;
+                    }
+                }
+                else
+                {
+                    // todas al primer hueco del orden que las admita
+                    foreach (int i in order)
+                        if ((sorted[i + 1] - sorted[i]) / (perGap[i] + 2) >= minSpacing) { best = i; break; }
                 }
                 if (best < 0) { missing = count - k; break; }
                 perGap[best]++;
             }
-            for (int i = 0; i < perGap.Length; i++)
+            for (int i = 0; i < n; i++)
             {
                 double gap = sorted[i + 1] - sorted[i];
                 for (int k = 1; k <= perGap[i]; k++) added.Add(sorted[i] + gap * k / (perGap[i] + 1));
             }
             return added;
-        }
-
-        /// <summary>
-        /// True si el lado "edge" del estribo s va montado sobre el mismo lado de otro estribo
-        /// que lo abarca (misma linea y rango mayor, o igual con indice menor).
-        /// </summary>
-        private bool OwnedByOther(PlanStirrup s, int edge)
-        {
-            double tol = Opt.Tol;
-            double line = LineCoord(s, edge);
-            double a0 = Horizontal(edge) ? s.Line.U1 : s.Line.V1, a1 = Horizontal(edge) ? s.Line.U2 : s.Line.V2;
-            foreach (PlanStirrup t in Stirrups)
-            {
-                if (ReferenceEquals(t, s)) continue;
-                if (Math.Abs(LineCoord(t, edge) - line) > tol) continue;
-                double b0 = Horizontal(edge) ? t.Line.U1 : t.Line.V1, b1 = Horizontal(edge) ? t.Line.U2 : t.Line.V2;
-                bool contains = b0 <= a0 + tol && b1 >= a1 - tol;
-                bool larger = (b1 - b0) > (a1 - a0) + tol || (Math.Abs((b1 - b0) - (a1 - a0)) <= tol && t.Index < s.Index);
-                if (contains && larger) return true;
-            }
-            return false;
         }
 
         /// <summary>True si el lado de algun estribo (vertical si !horizontal) pasa por la coordenada dada y cubre el rango entero.</summary>

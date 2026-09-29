@@ -32,6 +32,11 @@ namespace ColumnRebar
         public int BottomCount { get; set; } = 3;
         /// <summary>Modo por numero: intermedias en cada costado de cada estribo (sin contar las esquinas).</summary>
         public int SideCount { get; set; } = 1;
+        /// <summary>
+        /// Modo por numero: donde van las barras anadidas cuando otro estribo parte el lado:
+        /// "auto" (hueco mas grande), "left", "right" o "center" (simetrico). Cambiable por estribo en la ventana.
+        /// </summary>
+        public string FillMode { get; set; } = "auto";
         [JsonIgnore]
         public bool ByCount => !string.Equals((Mode ?? "").Trim(), "spacing", StringComparison.OrdinalIgnoreCase);
         /// <summary>Prolongacion de las barras por debajo de la base de la columna (mm, hacia la cimentacion o el piso inferior). 0 = empiezan en la base.</summary>
@@ -128,6 +133,8 @@ namespace ColumnRebar
             if (Longitudinal.TopCount < 2) Longitudinal.TopCount = 2;
             if (Longitudinal.BottomCount < 2) Longitudinal.BottomCount = 2;
             if (Longitudinal.SideCount < 0) Longitudinal.SideCount = 0;
+            string fm = (Longitudinal.FillMode ?? "").Trim().ToLowerInvariant();
+            Longitudinal.FillMode = fm == "left" || fm == "right" || fm == "center" ? fm : "auto";
             if (Stirrups.BarTypeName == null) Stirrups.BarTypeName = "";
             if (Stirrups.HookTypeName == null) Stirrups.HookTypeName = "";
             if (Crossties.BarTypeName == null) Crossties.BarTypeName = "";
