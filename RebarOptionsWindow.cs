@@ -64,7 +64,7 @@ namespace ColumnRebar
         private const string NoHook = "(sin gancho)";
         private const string SameAsCorner = "(igual que las de esquina)";
         private static readonly Thickness Pad = new Thickness(4, 2, 4, 2);
-        private static readonly Brush SelectedBrush = new SolidColorBrush(Color.FromRgb(0xDC, 0xE8, 0xF6));
+        private static readonly Brush SelectedBrush = RevitTheme.Selection;
 
         public RebarOptionsWindow(AppConfig cfg, IList<string> barTypes, IDictionary<string, double> diametersMm,
                                   IList<string> hookTypes, IDictionary<string, double> hookAngles, IList<HostAnalysis> items)
@@ -88,6 +88,7 @@ namespace ColumnRebar
             ShowInTaskbar = false;
             FontSize = 12;
 
+            RevitTheme.Apply(this);
             Content = BuildRoot();
             _selected = _items.FirstOrDefault(i => i.CanBuild);
             if (_selected != null) SelectItem(_selected);
@@ -160,7 +161,7 @@ namespace ColumnRebar
                 var kindRun = new System.Windows.Documents.Run(item.Kind + ": ")
                 {
                     FontWeight = FontWeights.SemiBold,
-                    Foreground = item.CanBuild ? Brushes.DarkGreen : Brushes.Firebrick
+                    Foreground = item.CanBuild ? RevitTheme.Ok : RevitTheme.Error
                 };
                 var detailRun = new System.Windows.Documents.Run(item.Detail(_cfg));
                 text.Inlines.Add(kindRun);
@@ -180,9 +181,9 @@ namespace ColumnRebar
                                   "la columna del primer piso). Vacio = se usa la distribucion general del apartado Estribos."
                     };
                     // marca de agua: la distribucion general, en gris, mientras la caja esta vacia
-                    var hint = new TextBlock { Foreground = Brushes.Gray, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+                    var hint = new TextBlock { Foreground = RevitTheme.Hint, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
                     var box = new Grid { Width = 170 };
-                    box.Children.Add(new Border { Background = Brushes.White });
+                    box.Children.Add(new Border { Background = RevitTheme.Input });
                     box.Children.Add(hint);
                     box.Children.Add(dist);
                     _distHints[item] = hint;
@@ -316,7 +317,7 @@ namespace ColumnRebar
                         _linesGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                         foreach ((string h, int c) in new[] { (horizontal ? "Filas (arriba-abajo)" : "Verticales (izq-der)", 0), ("barras", 1), ("reparto", 2) })
                         {
-                            var tb = new TextBlock { Text = h, Foreground = Brushes.DimGray, Margin = new Thickness(4, horizontal ? 2 : 8, 4, 2) };
+                            var tb = new TextBlock { Text = h, Foreground = RevitTheme.Muted, Margin = new Thickness(4, horizontal ? 2 : 8, 4, 2) };
                             Grid.SetRow(tb, gridRow); Grid.SetColumn(tb, c);
                             _linesGrid.Children.Add(tb);
                         }
@@ -366,10 +367,10 @@ namespace ColumnRebar
                     if (!count.IsFocused) count.Text = effective.ToString(CultureInfo.InvariantCulture);
                     int fi = Array.IndexOf(FillModes, own?.Fill ?? "auto");
                     fill.SelectedIndex = fi < 0 ? 0 : fi;
-                    count.Background = isOwn ? Brushes.LightYellow : Brushes.White;
+                    count.Background = isOwn ? RevitTheme.OwnValue : RevitTheme.Input;
                     if (line.Missing > 0)
                     {
-                        count.Background = Brushes.MistyRose;
+                        count.Background = RevitTheme.Invalid;
                         count.ToolTip = "No caben " + line.Missing + " barra(s) mas en esta linea con 1.5 diametros libres";
                     }
                     else count.ToolTip = "Minimo " + line.Fixed + " (esquinas y cruces de estribos); escribe mas para anadir intermedias";
@@ -446,7 +447,7 @@ namespace ColumnRebar
             AddRow(grid, r++, "Recubrimiento al estribo (mm):", _cover, "Distancia de cada cara de la columna al borde exterior del estribo.");
             _partition = new TextBox { Text = _cfg.PartitionTemplate, Margin = Pad };
             AddRow(grid, r++, "Particion:", _partition, "Plantilla del parametro Particion de cada barra. Comodines: " + PartitionName.Help);
-            _partitionPreview = new TextBlock { Foreground = Brushes.DimGray, Margin = Pad, TextWrapping = TextWrapping.Wrap };
+            _partitionPreview = new TextBlock { Foreground = RevitTheme.Muted, Margin = Pad, TextWrapping = TextWrapping.Wrap };
             AddRow(grid, r++, "", _partitionPreview, null);
             group.Content = grid;
             return group;
@@ -460,7 +461,7 @@ namespace ColumnRebar
 
             var secGroup = new GroupBox { Header = "Seccion (rueda: zoom, arrastrar: mover, doble clic: encajar)", Padding = new Thickness(4) };
             var secPanel = new DockPanel();
-            _previewCaption = new TextBlock { Foreground = Brushes.DimGray, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) };
+            _previewCaption = new TextBlock { Foreground = RevitTheme.Muted, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) };
             DockPanel.SetDock(_previewCaption, Dock.Top);
             secPanel.Children.Add(_previewCaption);
             var legend = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
@@ -472,14 +473,14 @@ namespace ColumnRebar
             DockPanel.SetDock(legend, Dock.Bottom);
             secPanel.Children.Add(legend);
             _preview = new SectionPreview { MinHeight = 200 };
-            secPanel.Children.Add(new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Child = _preview });
+            secPanel.Children.Add(new Border { BorderBrush = RevitTheme.Border, BorderThickness = new Thickness(1), Child = _preview });
             secGroup.Content = secPanel;
             Grid.SetRow(secGroup, 0);
             grid.Children.Add(secGroup);
 
             var elvGroup = new GroupBox { Header = "Alzado: distribucion de estribos", Padding = new Thickness(4), Margin = new Thickness(0, 6, 0, 0) };
             _elevation = new ElevationPreview { MinHeight = 150 };
-            elvGroup.Content = new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Child = _elevation };
+            elvGroup.Content = new Border { BorderBrush = RevitTheme.Border, BorderThickness = new Thickness(1), Child = _elevation };
             Grid.SetRow(elvGroup, 1);
             grid.Children.Add(elvGroup);
             return grid;
@@ -496,7 +497,7 @@ namespace ColumnRebar
         private UIElement BuildButtons()
         {
             var panel = new DockPanel();
-            _message = new TextBlock { Foreground = Brushes.Firebrick, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            _message = new TextBlock { Foreground = RevitTheme.Error, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             DockPanel.SetDock(buttons, Dock.Right);
 
@@ -506,8 +507,8 @@ namespace ColumnRebar
             {
                 AppConfig c = ReadConfig(out string err);
                 if (err != null) { _message.Text = err; return; }
-                try { c.Save(); _message.Foreground = Brushes.DarkGreen; _message.Text = "Guardado en " + AppConfig.ConfigPath(); }
-                catch (Exception ex) { _message.Foreground = Brushes.Firebrick; _message.Text = "No se pudo guardar: " + ex.Message; }
+                try { c.Save(); _message.Foreground = RevitTheme.Ok; _message.Text = "Guardado en " + AppConfig.ConfigPath(); }
+                catch (Exception ex) { _message.Foreground = RevitTheme.Error; _message.Text = "No se pudo guardar: " + ex.Message; }
             };
             buttons.Children.Add(save);
 
@@ -652,7 +653,7 @@ namespace ColumnRebar
             if (!int.TryParse(tb.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v < min)
             {
                 errors.Add(label + ": entero no valido (minimo " + min + ")");
-                tb.BorderBrush = Brushes.Firebrick;
+                tb.BorderBrush = RevitTheme.Error;
                 return min;
             }
             tb.ClearValue(Control.BorderBrushProperty);
@@ -664,7 +665,7 @@ namespace ColumnRebar
             if (!StirrupLayout.TryNumber(tb.Text, out double v) || v < min)
             {
                 errors.Add(label + ": numero no valido" + (min > 0 ? " (minimo " + Num(min) + ")" : ""));
-                tb.BorderBrush = Brushes.Firebrick;
+                tb.BorderBrush = RevitTheme.Error;
                 return min;
             }
             tb.ClearValue(Control.BorderBrushProperty);
@@ -688,7 +689,7 @@ namespace ColumnRebar
                 (_longType, true), (_stType, true), (_tieType, c.Crossties.Enabled)
             })
             {
-                if (_strictTypes && required && cb.SelectedIndex < 0) { cb.BorderBrush = Brushes.Firebrick; cb.BorderThickness = new Thickness(2); }
+                if (_strictTypes && required && cb.SelectedIndex < 0) { cb.BorderBrush = RevitTheme.Error; cb.BorderThickness = new Thickness(2); }
                 else { cb.ClearValue(Control.BorderBrushProperty); cb.ClearValue(Control.BorderThicknessProperty); }
             }
         }
@@ -720,7 +721,7 @@ namespace ColumnRebar
                 if (good) ok++;
                 if (_itemRuns.TryGetValue(item, out var runs))
                 {
-                    runs.kind.Foreground = good ? Brushes.DarkGreen : Brushes.Firebrick;
+                    runs.kind.Foreground = good ? RevitTheme.Ok : RevitTheme.Error;
                     runs.detail.Text = text;
                 }
             }
@@ -754,8 +755,8 @@ namespace ColumnRebar
                 _partitionPreview.Text = "";
             }
 
-            if (error != null) { _message.Foreground = Brushes.Firebrick; _message.Text = error; }
-            else if (_message.Foreground == Brushes.Firebrick) _message.Text = "";
+            if (error != null) { _message.Foreground = RevitTheme.Error; _message.Text = error; }
+            else if (_message.Foreground == RevitTheme.Error) _message.Text = "";
         }
 
         /// <summary>Estado de una columna con la configuracion dada: true si se puede armar, y el texto para su fila.</summary>
@@ -784,13 +785,13 @@ namespace ColumnRebar
         private void OnBuild()
         {
             AppConfig c = ReadConfig(out string error);
-            if (error != null) { _message.Foreground = Brushes.Firebrick; _message.Text = error; return; }
+            if (error != null) { _message.Foreground = RevitTheme.Error; _message.Text = error; return; }
             List<string> missing = MissingTypes(c);
             if (missing.Count > 0)
             {
                 _strictTypes = true;
                 MarkTypes(c);
-                _message.Foreground = Brushes.Firebrick;
+                _message.Foreground = RevitTheme.Error;
                 _message.Text = "Elige el tipo de barra de: " + string.Join(", ", missing) + ".";
                 return;
             }
