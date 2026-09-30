@@ -31,7 +31,9 @@
       <AddinDir>$(AppData)\Autodesk\Revit\Addins\2027\ColumnRebar\</AddinDir>
     </PropertyGroup>
     <MakeDir Directories="$(AddinDir)" />
-    <Copy SourceFiles="$(TargetPath);$(ProjectDir)config.json" DestinationFolder="$(AddinDir)" />
+    <Exec Command="powershell -NoProfile -Command &quot;Remove-Item -Path '$(AddinDir)*.old' -Force -ErrorAction SilentlyContinue; if (Test-Path '$(AddinDir)$(TargetFileName)') { try { Copy-Item '$(TargetPath)' '$(AddinDir)' -Force -ErrorAction Stop } catch { $bak = '$(AddinDir)$(TargetFileName).' + [guid]::NewGuid().ToString('N') + '.old'; Move-Item '$(AddinDir)$(TargetFileName)' $bak -Force; Copy-Item '$(TargetPath)' '$(AddinDir)' -Force } } else { Copy-Item '$(TargetPath)' '$(AddinDir)' -Force }&quot;" />
+    <Copy SourceFiles="$(ProjectDir)config.json" DestinationFolder="$(AddinDir)" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFolder="$(AddinDir)" Condition="Exists('$(TargetDir)$(TargetName).pdb')" ContinueOnError="true" />
     <Copy SourceFiles="$(ProjectDir)ColumnRebar.addin" DestinationFolder="$(AppData)\Autodesk\Revit\Addins\2027\" />
   </Target>
 
