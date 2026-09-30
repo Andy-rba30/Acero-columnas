@@ -56,6 +56,8 @@ namespace ColumnRebar
         private readonly Dictionary<HostAnalysis, (System.Windows.Documents.Run kind, System.Windows.Documents.Run detail)> _itemRuns
             = new Dictionary<HostAnalysis, (System.Windows.Documents.Run, System.Windows.Documents.Run)>();
         private readonly Dictionary<HostAnalysis, Border> _itemRows = new Dictionary<HostAnalysis, Border>();
+        /// <summary>Marca de agua de la caja de distribucion propia de cada columna (muestra la general).</summary>
+        private readonly Dictionary<HostAnalysis, TextBlock> _distHints = new Dictionary<HostAnalysis, TextBlock>();
         private HostAnalysis _selected;
         private bool _building = true;
         private bool _strictTypes;
@@ -144,7 +146,7 @@ namespace ColumnRebar
             var group = new GroupBox
             {
                 Header = "Columnas seleccionadas: " + _items.Count + " (" + ok + " armables). Haz clic en una para verla en el esquema. " +
-                         "La distribucion de estribos de la derecha es propia de cada columna (vacio = la general).",
+                         "A la derecha, la distribucion de estribos propia de cada columna (vacio = la general).",
                 Padding = new Thickness(4)
             };
             var panel = new StackPanel();
@@ -171,11 +173,23 @@ namespace ColumnRebar
                 if (item.CanBuild)
                 {
                     var side = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-                    side.Children.Add(new TextBlock { Text = "Estribos:", Margin = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center });
-                    var dist = new TextBox { Width = 150, Text = item.DistributionOverride, ToolTip = "Distribucion de estribos de esta columna, como \"1@50, 5@100, R@250\". Vacio = la general." };
+                    side.Children.Add(new TextBlock { Text = "Estribos de esta columna:", Margin = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center });
+                    var dist = new TextBox
+                    {
+                        Width = 170, Text = item.DistributionOverride, Background = Brushes.Transparent,
+                        ToolTip = "Distribucion de estribos propia de esta columna, como \"1@50, 8@100, R@200\" (por ejemplo, mas estribos en " +
+                                  "la columna del primer piso). Vacio = se usa la distribucion general del apartado Estribos."
+                    };
+                    // marca de agua: la distribucion general, en gris, mientras la caja esta vacia
+                    var hint = new TextBlock { Foreground = Brushes.Gray, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+                    var box = new Grid { Width = 170 };
+                    box.Children.Add(new Border { Background = Brushes.White });
+                    box.Children.Add(hint);
+                    box.Children.Add(dist);
+                    _distHints[item] = hint;
                     HostAnalysis captured = item;
-                    dist.TextChanged += (s, e) => { captured.DistributionOverride = dist.Text; Refresh(); };
-                    side.Children.Add(dist);
+                    dist.TextChanged += (s, e) => { captured.DistributionOverride = dist.Text; hint.Visibility = dist.Text.Length == 0 ? Visibility.Visible : Visibility.Hidden; Refresh(); };
+                    side.Children.Add(box);
                     Grid.SetColumn(side, 1);
                     row.Children.Add(side);
                 }
@@ -301,46 +315,46 @@ namespace ColumnRebar
                     _linesCaption.Text = item == null || plan == null ? "Barras por linea: selecciona una columna armable en la lista"
                         : "Barras por linea de " + item.Tag.Trim() + ": " + rows + " filas y " + cols + " verticales (minimo: sus esquinas y cruces; aqui solo se sube)";
                     if (item == null || plan == null) return;
-                    foreach (double w in new[] { 110, 60, 160, 70, 20, 110, 60, 160, 70 })
+                    foreach (double w in new[] { 120, 50, 150, 64 })
                         _linesGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
-                    int nrows = Math.Max(rows, cols) + 1;
-                    for (int i = 0; i < nrows; i++) _linesGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                    foreach ((string h, int c) in new[] { ("Filas (arriba-abajo)", 0), ("barras", 1), ("reparto", 2), ("Verticales (izq-der)", 5), ("barras", 6), ("reparto", 7) })
-                    {
-                        var tb = new TextBlock { Text = h, Foreground = Brushes.DimGray, Margin = Pad };
-                        Grid.SetRow(tb, 0); Grid.SetColumn(tb, c);
-                        _linesGrid.Children.Add(tb);
-                    }
+                    int gridRow = 0;
                     foreach (bool horizontal in new[] { true, false })
                     {
                         List<PlanLine> lines = horizontal ? plan.Rows : plan.Cols;
-                        int c0 = horizontal ? 0 : 5;
+                        _linesGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                        foreach ((string h, int c) in new[] { (horizontal ? "Filas (arriba-abajo)" : "Verticales (izq-der)", 0), ("barras", 1), ("reparto", 2) })
+                        {
+                            var tb = new TextBlock { Text = h, Foreground = Brushes.DimGray, Margin = new Thickness(4, horizontal ? 2 : 8, 4, 2) };
+                            Grid.SetRow(tb, gridRow); Grid.SetColumn(tb, c);
+                            _linesGrid.Children.Add(tb);
+                        }
+                        gridRow++;
                         for (int i = 0; i < lines.Count; i++)
                         {
-                            int row = i + 1, idx = i;
+                            int row = gridRow++, idx = i;
                             bool hz = horizontal;
                             PlanLine line = lines[i];
+                            _linesGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                             var lb = new TextBlock
                             {
                                 Text = line.Name + "  (" + ColumnSection.ToMm(line.Coord) + " mm)", Margin = Pad, VerticalAlignment = VerticalAlignment.Center,
                                 ToolTip = (horizontal ? "Fila a v = " : "Vertical a u = ") + ColumnSection.ToMm(line.Coord) + " mm (eje de las barras de esquina)"
                             };
-                            Grid.SetRow(lb, row); Grid.SetColumn(lb, c0);
+                            Grid.SetRow(lb, row); Grid.SetColumn(lb, 0);
                             _linesGrid.Children.Add(lb);
                             TextBox count = CountBox(0);
                             ComboBox fill = FillCombo("", true, !horizontal);
-                            Grid.SetRow(count, row); Grid.SetColumn(count, c0 + 1);
-                            Grid.SetRow(fill, row); Grid.SetColumn(fill, c0 + 2);
+                            fill.Width = 140;
+                            Grid.SetRow(count, row); Grid.SetColumn(count, 1);
+                            Grid.SetRow(fill, row); Grid.SetColumn(fill, 2);
                             _linesGrid.Children.Add(count);
                             _linesGrid.Children.Add(fill);
                             count.TextChanged += (sn, e) => { if (!_refreshingLines) { StoreLine(item, hz, idx, count, fill, ReadConfig(out _)); Refresh(); } };
-                            count.LostFocus += (sn, e) => Refresh();   // al salir se muestra el valor efectivo (nunca menor que el general)
+                            count.LostFocus += (sn, e) => Refresh();   // al salir se muestra el valor efectivo (nunca menor que el minimo)
                             fill.SelectionChanged += (sn, e) => { if (!_refreshingLines) { StoreLine(item, hz, idx, count, fill, ReadConfig(out _)); Refresh(); } };
-                            var reset = new Button { Content = "general", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Volver al numero y reparto generales en esta linea" };
-                            reset.ToolTip = "Volver al minimo (esquinas y cruces) y al reparto general en esta linea";
-                            reset.Content = "minimo";
+                            var reset = new Button { Content = "minimo", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Volver al minimo (esquinas y cruces) y al reparto general en esta linea" };
                             reset.Click += (sn, e) => { item.SetOwn(hz, idx, null); Refresh(); };
-                            Grid.SetRow(reset, row); Grid.SetColumn(reset, c0 + 3);
+                            Grid.SetRow(reset, row); Grid.SetColumn(reset, 3);
                             _linesGrid.Children.Add(reset);
                             _lineRows.Add((horizontal, i, count, fill));
                         }
@@ -716,6 +730,11 @@ namespace ColumnRebar
                     runs.kind.Foreground = good ? Brushes.DarkGreen : Brushes.Firebrick;
                     runs.detail.Text = text;
                 }
+            }
+            foreach (var kv in _distHints)
+            {
+                kv.Value.Text = "general: " + scratch.Stirrups.Distribution;
+                kv.Value.Visibility = string.IsNullOrEmpty(kv.Key.DistributionOverride) ? Visibility.Visible : Visibility.Hidden;
             }
             _buildButton.Content = "Armar " + ok + " elemento(s)";
             _buildButton.IsEnabled = ok > 0 && error == null;
