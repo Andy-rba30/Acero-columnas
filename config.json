@@ -29,7 +29,7 @@
     "directions": "both"
   },
 
-  "partitionTemplate": "COL-{marca}",
+  "partitionTemplate": "{categoria} - {prefijo}-{marca}",
 
   "probeSliceMm": 10,
   "prismCheckStepMm": 300,

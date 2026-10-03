@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Arba.Comun;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
 
@@ -33,6 +34,9 @@ namespace ColumnRebar
 
     public static class RebarGenerator
     {
+        /// <summary>Valores de "ARBA - Codigo" que escribe este add-in (contrato ARBA-comun): barras verticales, estribo N y grapas.</summary>
+        public const string CodeLongitudinal = "longitudinal", CodeStirrup = "estribo", CodeTie = "grapa";
+
         private static double Mm(double mm) => ColumnSection.Mm(mm);
         private static double ToMm(double ft) => ColumnSection.ToMm(ft);
         private const double MinSeg = 0.003;   // ~1 mm en pies
@@ -157,7 +161,8 @@ namespace ColumnRebar
 
                 string name = (required ? "longitudinal esquina" : "longitudinal intermedia") + " v=" + ToMm(first.V) +
                               (count > 1 ? " (" + count + " barras cada " + ToMm(step) + " mm)" : " u=" + ToMm(first.U));
-                Place(c, name, bt, RebarStyle.Standard, ElementId.InvalidElementId, true, normal, curves, count, step, longitudinal: true, stirrup: "");
+                Place(c, name, bt, RebarStyle.Standard, ElementId.InvalidElementId, true, normal, curves, count, step,
+                      longitudinal: true, stirrup: "", code: CodeLongitudinal);
                 c.Result.Bars += count;
             }
         }
@@ -182,6 +187,7 @@ namespace ColumnRebar
                     string name = "estribo " + (st.Index + 1) + " " + run.Label;
                     bool ok = Place(c, name, bt, RebarStyle.StirrupTie, c.StirrupHook, c.StirrupHookLeft, XYZ.BasisZ, curves,
                                     run.Count, run.Spacing, longitudinal: false, stirrup: (st.Index + 1).ToString(),
+                                    code: CodeStirrup + " " + (st.Index + 1),
                                     checkHooks: c.StirrupHook != ElementId.InvalidElementId && !c.StirrupHookChecked,
                                     flip: () => c.StirrupHookLeft = !c.StirrupHookLeft);
                     if (c.StirrupHook != ElementId.InvalidElementId) c.StirrupHookChecked = true;
@@ -209,6 +215,7 @@ namespace ColumnRebar
                     string name = "grapa " + n + " estribo " + (t.Stirrup + 1) + " " + run.Label;
                     bool ok = Place(c, name, bt, RebarStyle.StirrupTie, c.TieHook, c.TieHookLeft, XYZ.BasisZ, curves,
                                     run.Count, run.Spacing, longitudinal: false, stirrup: (t.Stirrup + 1).ToString(),
+                                    code: CodeTie,
                                     checkHooks: c.TieHook != ElementId.InvalidElementId && !c.TieHookChecked,
                                     flip: () => c.TieHookLeft = !c.TieHookLeft);
                     if (c.TieHook != ElementId.InvalidElementId) c.TieHookChecked = true;
@@ -230,7 +237,7 @@ namespace ColumnRebar
         /// </summary>
         private static bool Place(Ctx c, string name, RebarBarType bt, RebarStyle style, ElementId hook, bool hookLeft,
                                   XYZ normal, List<Curve> curves, int count, double spacing, bool longitudinal, string stirrup,
-                                  bool checkHooks = false, Action flip = null)
+                                  string code, bool checkHooks = false, Action flip = null)
         {
             normal = normal.Normalize();
             bool array = count >= 2 && spacing > MinSeg;
@@ -279,7 +286,7 @@ namespace ColumnRebar
                     }
                 }
 
-                Finish(c.Doc, rb, c.Item.Partition(c.Cfg, SetName(name), stirrup));
+                Finish(c.Doc, rb, c.S.Host, c.Item.Partition(c.Cfg, SetName(name), stirrup), code);
                 c.Result.Created.Add(new CreatedSet { Id = rb.Id, Name = name, Radius = r, Longitudinal = longitudinal });
                 return true;
             }
@@ -431,10 +438,16 @@ namespace ColumnRebar
             }
         }
 
-        private static void Finish(Document doc, Rebar r, string partition)
+        /// <summary>
+        /// Marca el conjunto recien creado segun el contrato ARBA-comun: Particion (parametro predefinido,
+        /// con respaldo por nombre en ingles y espanol; LookupParameter("Partition") no escribia nada en
+        /// Revit en espanol), "ARBA - Origen" = COLUMNAS, "ARBA - Codigo" (longitudinal / estribo N / grapa)
+        /// y "Metrado - Elemento" = COLUMNAS. Los parametros compartidos los asegura el comando antes de armar.
+        /// </summary>
+        private static void Finish(Document doc, Rebar r, Element host, string partition, string code)
         {
-            Parameter p = r.LookupParameter("Partition");
-            if (p != null && !p.IsReadOnly && !string.IsNullOrEmpty(partition)) p.Set(partition);
+            ArbaPartition.Write(r, partition);
+            ArbaOrigin.WriteFor(r, host, ArbaContract.Columnas, code);
             try { r.SetUnobscuredInView(doc.ActiveView, true); } catch { }
         }
 
@@ -443,7 +456,7 @@ namespace ColumnRebar
             var all = AllBarTypes(doc);
             if (all.Count == 0)
                 throw new InvalidOperationException("El proyecto no tiene ningun tipo de barra (RebarBarType). Carga una familia de armadura primero.");
-            string match = MatchName(all.Select(b => b.Name), name);
+            string match = NameMatch.First(all.Select(b => b.Name), name);
             if (match == null)
                 throw new InvalidOperationException("el tipo de barra de " + use + " \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana");
             return all.First(b => b.Name == match);
@@ -454,24 +467,12 @@ namespace ColumnRebar
         {
             if (string.IsNullOrWhiteSpace(name)) return ElementId.InvalidElementId;
             var all = AllHookTypes(doc);
-            string match = MatchName(all.Select(h => h.Name), name);
+            string match = NameMatch.First(all.Select(h => h.Name), name);
             if (match == null)
                 throw new InvalidOperationException("el tipo de gancho \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana o deja el gancho vacio");
             return all.First(h => h.Name == match).Id;
         }
 
-        /// <summary>
-        /// Nombre que corresponde a "name": coincidencia exacta, si no parcial (sin distinguir
-        /// mayusculas); null si no hay ninguna. Nunca se sustituye por otro: sin coincidencia no se arma.
-        /// </summary>
-        public static string MatchName(IEnumerable<string> names, string name)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return null;
-            var list = names.ToList();
-            string exact = list.FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
-            if (exact != null) return exact;
-            return list.FirstOrDefault(n => n.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0);
-        }
 
         public static List<RebarBarType> AllBarTypes(Document doc) =>
             new FilteredElementCollector(doc).OfClass(typeof(RebarBarType)).Cast<RebarBarType>()

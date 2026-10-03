@@ -15,6 +15,12 @@ columna seleccionada y se elige el armado: tipos de barra, separación de
 longitudinales, prolongaciones, distribución de estribos (global y por columna),
 ganchos, grapas y recubrimiento, con un esquema de la sección y del alzado.
 
+Comparte con el resto de add-ins ARBA el código común
+[ARBA-comun](https://github.com/Andy-rba30/ARBA-comun) (submódulo `external/ARBA-comun`,
+contrato **1.0.0**): cinta `ARBA`, partición `COLUMNAS - COL-{marca}`, parámetros
+compartidos `ARBA - Origen` / `ARBA - Código` / `Metrado - Elemento`, borrar y
+rearmar, y migración de modelos anteriores. Ver [Contrato ARBA-comun](#contrato-arba-comun).
+
 ## Cómo deduce la sección
 
 1. Toma el sólido del elemento. Si la columna está **unida** a vigas o losas que le
@@ -144,7 +150,10 @@ lo que no.
 - **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases.
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
-  Partición (`{marca}`, `{id}`, `{tipo}`, `{familia}`, `{conjunto}`, `{estribo}`).
+  Partición (`{categoria}`, `{prefijo}`, `{marca}`, `{id}`, `{codigo}` / `{estribo}`,
+  `{tipo}`, `{familia}`, `{conjunto}`), con el ejemplo de la columna seleccionada. Si
+  la plantilla no empieza por `{categoria} - {prefijo}-` la ventana avisa de que
+  incumple el contrato. El pie muestra la versión del contrato ARBA-comun.
 - **Sección**: hormigón, cada estribo con su color y sus ganchos dibujados con el
   ángulo del tipo elegido (90°, 135° o 180°; esquema), las etiquetas F1... y V1...
   de las líneas,
@@ -170,28 +179,73 @@ Armar avisa de qué falta.
   "stirrups":     { "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left",
                     "distribution": "1@50, 5@100, R@250", "symmetric": true, "bottomOffsetMm": 0, "topOffsetMm": 0 },
   "crossties":    { "enabled": false, "barTypeName": "", "hookTypeName": "135", "hookOrientation": "left", "directions": "both" },
-  "partitionTemplate": "COL-{marca}",
+  "partitionTemplate": "{categoria} - {prefijo}-{marca}",
   "probeSliceMm": 10, "prismCheckStepMm": 300, "prismCheckToleranceMm": 2, "rectilinearAngleDeg": 0.5
 }
 ```
 
 Los nombres de tipo de barra y de gancho pueden ser exactos o un fragmento
-(`"135"`, `"3/8"`); sin coincidencia no se arma, nunca se sustituye por otro tipo.
+(`"135"`, `"3/8"`); sin coincidencia no se arma, nunca se sustituye por otro tipo
+(`NameMatch.First` del común).
+
+## Contrato ARBA-comun
+
+El add-in sigue el contrato 1.0.0 de [ARBA-comun](https://github.com/Andy-rba30/ARBA-comun)
+(`external/ARBA-comun/CONTRATO.md`), igual que Zapatas, Cimientos, Bloques, Vigas,
+Losas, Muros y el plugin de metrados:
+
+- **Partición** de cada conjunto: `COLUMNAS - COL-{marca}` (categoría del anfitrión,
+  prefijo `COL` del add-in, Marca de la columna o su Id si está vacía). Se escribe en el
+  parámetro predefinido Partición con respaldo por nombre en inglés y español: antes se
+  buscaba solo `"Partition"` y en Revit en español no se escribía nada. Con la plantilla
+  `{categoria} - {prefijo}-{marca}-{estribo}` cada estribo tendría su propia partición
+  (`COLUMNAS - COL-C3-1`); por defecto el detalle va solo en `ARBA - Código`.
+- **Parámetros compartidos** (GUID fijos, grupo Datos, de ejemplar; el comando los
+  vincula a las armaduras al empezar, conservando los valores de un parámetro homónimo
+  anterior): `ARBA - Origen` = `COLUMNAS`, `ARBA - Código` = `longitudinal`,
+  `estribo N` o `grapa`, `Metrado - Elemento` = `COLUMNAS` (es el filtro de la tabla
+  "Metrado acero - Columnas" del plugin de metrados).
+- **Borrar y rearmar**: si alguna columna elegida ya tiene conjuntos con
+  `ARBA - Origen = COLUMNAS`, al pulsar Armar se pregunta una vez: *Borrar la armadura
+  del add-in y rearmar* (sin duplicados; si el nuevo armado falla, la columna se deshace
+  entera y conserva la anterior) o *Conservar y armar encima*. La armadura manual o de
+  otros add-ins no se toca.
+- **Migración** de modelos anteriores: si una columna tiene barras `COL-C1` sin
+  `ARBA - Origen` (versión anterior del add-in), se ofrece *Migrar sin rearmar*
+  (reescribe la partición a `COLUMNAS - COL-C1` y rellena origen, código y
+  `Metrado - Elemento` sin crear ni borrar barras), *Migrar, borrar y rearmar* o
+  *Conservar y armar encima*. El botón "Migrar particiones y origen" de todo el modelo
+  lo aporta el plugin de metrados.
+- **Cinta**: pestaña `ARBA`, panel `Acero`, desplegable `Acero`, botón `Columnas`
+  (nombre interno `ARBA_Acero_Columnas`) con icono propio; el orden de paneles y el
+  desplegable los gestiona `ArbaRibbon` del común, compartido con los demás add-ins.
 
 ## Compilar e instalar
 
 Requiere el SDK de .NET 10 y Revit 2027 (los paquetes `Nice3point.Revit.Api.*`
 traen las DLL de la API; para Revit 2025/2026 cambia el `TargetFramework` a
-`net8.0-windows` y la versión del paquete).
+`net8.0-windows`, la versión del paquete y `<RevitVersion>`). El código común viene
+como **submódulo git**, así que hay que clonarlo con él:
 
 ```
-dotnet build -c Debug
+git clone --recurse-submodules https://github.com/Andy-rba30/Acero-columnas
+# o, en un clon ya hecho:
+git submodule update --init
+dotnet build -c Release
 ```
 
-En Debug la compilación copia `ColumnRebar.dll`, `config.json` y `ColumnRebar.addin`
-a `%AppData%\Autodesk\Revit\Addins\2027\`. Al abrir Revit aparece la pestaña **ARBA**
-con el panel **Columnas** (comparte la pestaña con el add-in de muros si está
-instalado) y el comando queda también en Complementos > Herramientas externas.
+`ColumnRebar.csproj` importa `external/ARBA-comun/Arba.Comun.props`, que compila
+`external/ARBA-comun/src/**/*.cs` dentro de `ColumnRebar.dll` (nunca como DLL aparte:
+Revit carga todos los add-ins a la vez). Para subir de versión del común:
+`git -C external/ARBA-comun checkout v1.x.0` y commit del puntero. No se modifica nada
+dentro de `external/ARBA-comun`; lo que le falte se anota en `NOTAS-ARBA-COMUN.md`.
+
+En Debug y en Windows la compilación copia `ColumnRebar.dll`, `config.json` y
+`ColumnRebar.addin` a `%AppData%\Autodesk\Revit\Addins\2027\` (fuera de Windows el
+paso se omite, pero el proyecto compila igual gracias a `EnableWindowsTargeting`). Al
+abrir Revit aparece la pestaña **ARBA** con el panel **Acero** y su desplegable
+**Acero**, donde está el botón **Columnas** junto a los de los demás add-ins ARBA
+instalados; el comando queda también en Complementos > Herramientas externas.
 
 ## Estructura del código
 
@@ -204,8 +258,10 @@ instalado) y el comando queda también en Complementos > Herramientas externas.
 | `HostAnalysis.cs` | Resultado por elemento (sección o motivo de rechazo) y elecciones por columna. |
 | `RebarGenerator.cs` | Crea los `Rebar` con las dos redes de seguridad y la inversión automática de ganchos. |
 | `RebarOptionsWindow.cs`, `SectionPreview.cs`, `ElevationPreview.cs` | Ventana y esquemas (WPF en código, sin XAML). |
-| `ArmarColumnaCommand.cs`, `RibbonApp.cs` | Comando externo y pestaña de la cinta. |
-| `AppConfig.cs`, `PartitionName.cs` | Configuración y plantilla de Partición. |
+| `ArmarColumnaCommand.cs` | Comando externo: análisis, ventana, parámetros del contrato, borrar y rearmar, migración, informe. |
+| `RibbonApp.cs` | Botón `Columnas` (icono propio) en la cinta `ARBA` compartida. |
+| `AppConfig.cs` | Configuración (`config.json`), plantilla de Partición por defecto del contrato. |
+| `external/ARBA-comun/src/` | Código común ARBA (submódulo, `namespace Arba.Comun`): `ArbaContract`, `ArbaPartition`, `PartitionName`, `ArbaOrigin`, `ArbaSharedParams`, `ArbaMigration`, `ArbaRibbon`, `RevitTheme`, `NameMatch`. |
 
 Las clases puras (`Rectilinear`, `ColumnPlan`, `StirrupLayout`) no dependen de Revit
 y se pueden probar en un programa de consola.

@@ -72,11 +72,16 @@ namespace ColumnRebar
         public CrosstieCfg Crossties { get; set; } = new CrosstieCfg();
 
         /// <summary>
-        /// Plantilla del parametro Particion de cada barra. Comodines: {marca} (Marca del
-        /// elemento; si esta vacia se usa el Id), {id}, {tipo}, {familia}, {conjunto}
-        /// (nombre del juego de barras) y {estribo}.
+        /// Plantilla del parametro Particion de cada barra, segun el contrato ARBA-comun:
+        /// "{categoria} - {prefijo}-{marca}" da "COLUMNAS - COL-C3". Comodines: {categoria}
+        /// (del anfitrion: COLUMNAS), {prefijo} (COL), {marca} (Marca del anfitrion; si esta
+        /// vacia se usa el Id), {id}, {tipo}, {familia}, {conjunto} (nombre del juego de barras)
+        /// y {codigo} / {estribo} (numero de estribo).
         /// </summary>
-        public string PartitionTemplate { get; set; } = "COL-{marca}";
+        public string PartitionTemplate { get; set; } = DefaultPartitionTemplate;
+
+        /// <summary>Plantilla de particion del contrato ARBA-comun para este add-in.</summary>
+        public const string DefaultPartitionTemplate = "{categoria} - {prefijo}-{marca}";
 
         /// <summary>Espesor de las rebanadas de sondeo geometrico (mm).</summary>
         public double ProbeSliceMm { get; set; } = 10;
@@ -124,7 +129,7 @@ namespace ColumnRebar
             if (PrismCheckStepMm <= 0) PrismCheckStepMm = 300;
             if (PrismCheckToleranceMm <= 0) PrismCheckToleranceMm = 2;
             if (RectilinearAngleDeg <= 0) RectilinearAngleDeg = 0.5;
-            if (string.IsNullOrWhiteSpace(PartitionTemplate)) PartitionTemplate = "COL-{marca}";
+            if (string.IsNullOrWhiteSpace(PartitionTemplate)) PartitionTemplate = DefaultPartitionTemplate;
         }
 
         public static string ConfigPath()

@@ -12,7 +12,18 @@
     <RootNamespace>ColumnRebar</RootNamespace>
     <!-- Revit ya carga sus propias DLL: no copiarlas al output -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- El submodulo no entra por el glob por defecto: Arba.Comun.props incluye solo src/**/*.cs (evita CS2002
+         y que se compilen build/CheckUsage.cs y tests/Program.cs del comun) -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);external/**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <!-- Codigo comun ARBA (submodulo external/ARBA-comun, etiqueta v1.0.0), compilado dentro de este ensamblado -->
+  <PropertyGroup>
+    <RevitVersion>2027</RevitVersion>
+    <!-- Permite compilar net10.0-windows fuera de Windows (CI, Linux) -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+  <Import Project="external/ARBA-comun/Arba.Comun.props" />
 
   <ItemGroup>
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2027.*" ExcludeAssets="runtime" />
@@ -25,8 +36,8 @@
     </None>
   </ItemGroup>
 
-  <!-- Copia automatica al directorio de add-ins de Revit al compilar en Debug -->
-  <Target Name="CopyToRevit" AfterTargets="Build" Condition="'$(Configuration)'=='Debug'">
+  <!-- Copia automatica al directorio de add-ins de Revit al compilar en Debug (solo en Windows) -->
+  <Target Name="CopyToRevit" AfterTargets="Build" Condition="'$(Configuration)'=='Debug' AND '$(OS)'=='Windows_NT'">
     <PropertyGroup>
       <AddinDir>$(AppData)\Autodesk\Revit\Addins\2027\ColumnRebar\</AddinDir>
     </PropertyGroup>

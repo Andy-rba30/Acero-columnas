@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Arba.Comun;
 
 namespace ColumnRebar
 {
@@ -49,6 +50,7 @@ namespace ColumnRebar
         private CheckBox _stSym, _tieOn;
         private TextBlock _message, _partitionPreview, _previewCaption;
         private Button _buildButton;
+        private TextBlock _partitionWarning;
         private SectionPreview _preview;
         private ElevationPreview _elevation;
 
@@ -230,7 +232,7 @@ namespace ColumnRebar
                    "Tipo de barra de las barras obligadas: las de las esquinas de cada estribo y las de los cruces entre estribos.");
             _longTypeInter = TypeCombo(_cfg.Longitudinal.IntermediateBarTypeName);
             _longTypeInter.Items.Insert(0, SameAsCorner);
-            if (RebarGenerator.MatchName(_barTypes, _cfg.Longitudinal.IntermediateBarTypeName) == null) _longTypeInter.SelectedIndex = 0;
+            if (NameMatch.First(_barTypes, _cfg.Longitudinal.IntermediateBarTypeName) == null) _longTypeInter.SelectedIndex = 0;
             else _longTypeInter.SelectedIndex = _longTypeInter.SelectedIndex + 1;
             AddRow(grid, r++, "Barras intermedias:", _longTypeInter,
                    "Tipo de barra de las intermedias (las que van entre las obligadas a lo largo de cada lado). Puede ser otro diametro.");
@@ -446,9 +448,19 @@ namespace ColumnRebar
             _cover = NumBox(_cfg.CoverMm);
             AddRow(grid, r++, "Recubrimiento al estribo (mm):", _cover, "Distancia de cada cara de la columna al borde exterior del estribo.");
             _partition = new TextBox { Text = _cfg.PartitionTemplate, Margin = Pad };
-            AddRow(grid, r++, "Particion:", _partition, "Plantilla del parametro Particion de cada barra. Comodines: " + PartitionName.Help);
+            AddRow(grid, r++, "Particion:", _partition,
+                   "Plantilla del parametro Particion de cada barra. Por el contrato ARBA-comun " + ArbaContract.Version +
+                   " empieza por \"{categoria} - {prefijo}-\" (por defecto \"" + AppConfig.DefaultPartitionTemplate +
+                   "\" da COLUMNAS - COL-C3). Comodines: " + PartitionName.Help);
             _partitionPreview = new TextBlock { Foreground = RevitTheme.Muted, Margin = Pad, TextWrapping = TextWrapping.Wrap };
             AddRow(grid, r++, "", _partitionPreview, null);
+            _partitionWarning = new TextBlock
+            {
+                Foreground = RevitTheme.Error, Margin = Pad, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed,
+                Text = "La plantilla no sigue el contrato ARBA-comun: tiene que empezar por \"{categoria} - {prefijo}-\" para que " +
+                       "el plugin de metrados agrupe estas barras con las de los demas add-ins (COLUMNAS - COL-C3)."
+            };
+            AddRow(grid, r++, "", _partitionWarning, null);
             group.Content = grid;
             return group;
         }
@@ -497,6 +509,14 @@ namespace ColumnRebar
         private UIElement BuildButtons()
         {
             var panel = new DockPanel();
+            var version = new TextBlock
+            {
+                Text = "Contrato ARBA-comun " + ArbaContract.Version, Foreground = RevitTheme.Hint,
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0),
+                ToolTip = "Version del contrato ARBA-comun (parametros compartidos, particion y cinta) con la que se compilo este add-in."
+            };
+            DockPanel.SetDock(version, Dock.Left);
+            panel.Children.Add(version);
             _message = new TextBlock { Foreground = RevitTheme.Error, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             DockPanel.SetDock(buttons, Dock.Right);
@@ -566,7 +586,7 @@ namespace ColumnRebar
         {
             var cb = new ComboBox { Margin = Pad };
             foreach (string n in _barTypes) cb.Items.Add(TypeDisplay(n));
-            string match = RebarGenerator.MatchName(_barTypes, current);
+            string match = NameMatch.First(_barTypes, current);
             cb.SelectedIndex = match == null ? -1 : _barTypes.IndexOf(match);
             return cb;
         }
@@ -579,7 +599,7 @@ namespace ColumnRebar
             var cb = new ComboBox { Margin = Pad };
             cb.Items.Add(NoHook);
             foreach (string n in _hookTypes) cb.Items.Add(n);
-            string match = RebarGenerator.MatchName(_hookTypes, current);
+            string match = NameMatch.First(_hookTypes, current);
             cb.SelectedIndex = match == null ? 0 : _hookTypes.IndexOf(match) + 1;
             return cb;
         }
@@ -590,7 +610,7 @@ namespace ColumnRebar
         private double HookAngle(string name)
         {
             if (string.IsNullOrEmpty(name)) return 0;
-            string match = RebarGenerator.MatchName(_hookTypes, name);
+            string match = NameMatch.First(_hookTypes, name);
             if (match != null && _hookAngles.TryGetValue(match, out double deg) && deg > 0) return deg;
             return 135;
         }
@@ -606,7 +626,7 @@ namespace ColumnRebar
 
         private double DiameterFt(string typeName)
         {
-            string match = RebarGenerator.MatchName(_barTypes, typeName);
+            string match = NameMatch.First(_barTypes, typeName);
             return match != null && _diametersMm.TryGetValue(match, out double mm) ? ColumnSection.Mm(mm) : 0;
         }
 
@@ -744,7 +764,9 @@ namespace ColumnRebar
                 RefreshLines(scratch, plan != null && plan.Error == null ? plan : null);
                 if (plan != null) _preview.Show(_selected.Section, plan, hookDeg, tieHookDeg); else _preview.Clear(text);
                 if (runs != null) _elevation.Show(_selected.Section, plan, runs, scratch); else _elevation.Clear(text);
-                _partitionPreview.Text = "Ejemplo: " + _selected.Partition(scratch, "estribo", "1");
+                _partitionPreview.Text = "Ejemplo: " + _selected.Partition(scratch, "estribo", "1") +
+                                         (_selected.HasOwnRebar ? "   (ya tiene armadura de este add-in: al armar se pregunta si borrarla)" : "") +
+                                         (_selected.HasLegacyRebar ? "   (tiene barras COL-… anteriores al contrato: al armar se ofrece migrarlas)" : "");
             }
             else
             {
@@ -754,6 +776,7 @@ namespace ColumnRebar
                 _elevation.Clear("");
                 _partitionPreview.Text = "";
             }
+            _partitionWarning.Visibility = ArbaPartition.TemplateFollowsContract(scratch.PartitionTemplate) ? Visibility.Collapsed : Visibility.Visible;
 
             if (error != null) { _message.Foreground = RevitTheme.Error; _message.Text = error; }
             else if (_message.Foreground == RevitTheme.Error) _message.Text = "";

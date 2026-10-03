@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Arba.Comun;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
 
@@ -50,13 +51,33 @@ namespace ColumnRebar
         public string Distribution(AppConfig cfg) =>
             string.IsNullOrWhiteSpace(DistributionOverride) ? cfg.Stirrups.Distribution : DistributionOverride;
 
+        /// <summary>
+        /// Particion del contrato ARBA-comun para una barra de esta columna: la categoria la deduce
+        /// del anfitrion (COLUMNAS), el prefijo es el del add-in (COL) y la marca (o el Id) la del
+        /// anfitrion; <paramref name="stirrup"/> (numero de estribo) va en {codigo} / {estribo}.
+        /// Con la plantilla por defecto da "COLUMNAS - COL-C3".
+        /// </summary>
         public string Partition(AppConfig cfg, string setName, string stirrup)
         {
-            return PartitionName.Expand(cfg.PartitionTemplate, new PartitionName.Source
+            return ArbaPartition.BuildFor(Host, ArbaContract.Columnas, cfg.PartitionTemplate, new PartitionName.Source
             {
-                Mark = Mark, Id = Host.Id.ToString(), TypeName = TypeName, FamilyName = FamilyName,
-                SetName = setName, Stirrup = stirrup
+                Mark = Mark, TypeName = TypeName, FamilyName = FamilyName, SetName = setName, Code = stirrup
             });
+        }
+
+        /// <summary>Hay conjuntos de este add-in (ARBA - Origen = COLUMNAS) alojados en la columna.</summary>
+        public bool HasOwnRebar;
+        /// <summary>Hay conjuntos anteriores al contrato (particion COL-… sin ARBA - Origen) alojados en la columna.</summary>
+        public bool HasLegacyRebar;
+
+        /// <summary>Lee si la columna ya tiene armadura de este add-in o anterior al contrato (solo lectura).</summary>
+        public void ScanExisting(Document doc)
+        {
+            HasOwnRebar = false;
+            HasLegacyRebar = false;
+            if (Host == null) return;
+            try { HasOwnRebar = ArbaOrigin.Find(doc, ArbaContract.Columnas, Host).Count > 0; } catch (Exception) { }
+            try { HasLegacyRebar = ArbaMigration.HasLegacy(doc, Host, ArbaContract.Columnas); } catch (Exception) { }
         }
 
         public static HostAnalysis Analyze(Document doc, Element host, AppConfig cfg)
