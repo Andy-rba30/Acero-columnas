@@ -26,6 +26,9 @@ namespace ColumnRebar
         public List<LineSpec> RowOverrides = new List<LineSpec>();
         public List<LineSpec> ColOverrides = new List<LineSpec>();
 
+        /// <summary>Estribos interiores de esta columna (ademas del de cada rectangulo), con las barras que abraza cada uno.</summary>
+        public List<InnerStirrupSpec> InnerStirrups = new List<InnerStirrupSpec>();
+
         public List<LineSpec> Overrides(bool horizontal) => horizontal ? RowOverrides : ColOverrides;
 
         /// <summary>Eleccion propia de una linea, o null si usa el general.</summary>
