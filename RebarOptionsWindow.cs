@@ -46,6 +46,15 @@ namespace ColumnRebar
         private HostAnalysis _linesFor;
         private int _linesRowCount, _linesColCount;
         private bool _refreshingLines;
+        /// <summary>Cuadro de estribos interiores de la columna seleccionada.</summary>
+        private TextBlock _innerCaption;
+        private StackPanel _innerList;
+        private Button _innerAdd;
+        private readonly List<(InnerStirrupSpec spec, TextBox[] boxes)> _innerRows = new List<(InnerStirrupSpec, TextBox[])>();
+        private HostAnalysis _innerFor;
+        private int _innerCount = -1;
+        private ColumnPlan _innerPlan;
+        private bool _refreshingInner;
         private TextBox _stDist, _stBottomOff, _stTopOff, _cover, _partition;
         private CheckBox _stSym, _tieOn;
         private TextBlock _message, _partitionPreview, _previewCaption;
@@ -392,7 +401,7 @@ namespace ColumnRebar
 
         private UIElement BuildStirrups()
         {
-            var group = new GroupBox { Header = "Estribos (uno cerrado por cada rectangulo de la seccion)", Padding = new Thickness(4) };
+            var group = new GroupBox { Header = "Estribos (uno cerrado por cada rectangulo de la seccion, mas los interiores)", Padding = new Thickness(4) };
             var grid = FormGrid();
             int r = 0;
             _stType = TypeCombo(_cfg.Stirrups.BarTypeName);
@@ -412,8 +421,101 @@ namespace ColumnRebar
             AddRow(grid, r++, "Desfase en la base (mm):", _stBottomOff, "La distribucion empieza a contar desde la base mas este desfase.");
             _stTopOff = NumBox(_cfg.Stirrups.TopOffsetMm);
             AddRow(grid, r++, "Desfase en coronacion (mm):", _stTopOff, "La distribucion termina en la coronacion menos este desfase (por ejemplo el canto de la losa si el elemento la incluye).");
-            group.Content = grid;
+
+            // estribos interiores de la columna seleccionada
+            var panel = new StackPanel();
+            panel.Children.Add(grid);
+            _innerCaption = new TextBlock { Margin = new Thickness(4, 6, 4, 2), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
+            panel.Children.Add(_innerCaption);
+            _innerList = new StackPanel { Margin = new Thickness(4, 0, 4, 2) };
+            panel.Children.Add(_innerList);
+            _innerAdd = new Button
+            {
+                Content = "Anadir estribo interior", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 2, 4, 2), HorizontalAlignment = HorizontalAlignment.Left,
+                ToolTip = "Estribo cerrado que abraza un grupo de barras de esta columna, por ejemplo las tres del medio de las caras largas. " +
+                          "Se ajusta por fuera a las barras elegidas, con la misma distribucion y el mismo gancho que los demas estribos."
+            };
+            _innerAdd.Click += (s, e) =>
+            {
+                if (_innerFor == null || _innerPlan == null) return;
+                _innerFor.InnerStirrups.Add(InnerStirrupSpec.Centered(_innerPlan.BarUs.Count, _innerPlan.BarVs.Count));
+                Refresh();
+            };
+            panel.Children.Add(_innerAdd);
+            group.Content = panel;
             return group;
+        }
+
+        /// <summary>
+        /// Reconstruye (si cambia la columna o su numero de estribos interiores) o actualiza el
+        /// cuadro de estribos interiores de la columna seleccionada: uno por fila, con las
+        /// barras que abraza en horizontal (de izquierda a derecha) y en vertical (de arriba
+        /// abajo), numeradas como en el esquema de la seccion.
+        /// </summary>
+        private void RefreshInner(ColumnPlan plan)
+        {
+            HostAnalysis item = _selected != null && _selected.CanBuild ? _selected : null;
+            int n = item?.InnerStirrups.Count ?? 0;
+            bool rebuild = !ReferenceEquals(_innerFor, item) || _innerCount != n;
+            _innerPlan = plan;
+            _refreshingInner = true;
+            try
+            {
+                _innerAdd.IsEnabled = item != null && plan != null;
+                _innerCaption.Text = item == null ? "Estribos interiores: selecciona una columna armable en la lista"
+                    : "Estribos interiores de " + item.Tag.Trim() + ": " + (n == 0 ? "ninguno" : n.ToString(CultureInfo.InvariantCulture)) +
+                      (plan != null && n > 0 ? " (barras de 1 a " + plan.BarUs.Count + " en horizontal y de 1 a " + plan.BarVs.Count + " en vertical, numeradas en el esquema)" : "");
+                if (rebuild)
+                {
+                    _innerFor = item; _innerCount = n;
+                    _innerRows.Clear();
+                    _innerList.Children.Clear();
+                    if (item == null) return;
+                    for (int k = 0; k < n; k++)
+                    {
+                        InnerStirrupSpec spec = item.InnerStirrups[k];
+                        int number = item.Section.Rects.Count + k + 1;
+                        var row = new StackPanel { Orientation = Orientation.Horizontal };
+                        row.Children.Add(new TextBlock { Text = "E" + number, Width = 30, FontWeight = FontWeights.SemiBold, Foreground = SectionPreview.StirrupBrush(number - 1), Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
+                        var boxes = new TextBox[4];
+                        string[] labels = { "horizontal: de la", "a la", "   vertical: de la", "a la" };
+                        for (int b = 0; b < 4; b++)
+                        {
+                            row.Children.Add(new TextBlock { Text = labels[b], Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
+                            TextBox box = CountBox(0);
+                            int field = b;
+                            box.TextChanged += (sn, e) =>
+                            {
+                                if (_refreshingInner || !int.TryParse(box.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v)) return;
+                                if (field == 0) spec.UFrom = v; else if (field == 1) spec.UTo = v; else if (field == 2) spec.VFrom = v; else spec.VTo = v;
+                                Refresh();
+                            };
+                            box.LostFocus += (sn, e) => Refresh();
+                            boxes[b] = box;
+                            row.Children.Add(box);
+                        }
+                        var remove = new Button { Content = "quitar", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Quitar este estribo interior" };
+                        remove.Click += (sn, e) => { item.InnerStirrups.Remove(spec); Refresh(); };
+                        row.Children.Add(remove);
+                        _innerList.Children.Add(row);
+                        _innerRows.Add((spec, boxes));
+                    }
+                }
+                for (int k = 0; k < _innerRows.Count; k++)
+                {
+                    (InnerStirrupSpec spec, TextBox[] boxes) = _innerRows[k];
+                    int[] values = { spec.UFrom, spec.UTo, spec.VFrom, spec.VTo };
+                    string err = plan != null && k < plan.InteriorErrors.Count ? plan.InteriorErrors[k] : null;
+                    for (int b = 0; b < 4; b++)
+                    {
+                        if (!boxes[b].IsFocused) boxes[b].Text = values[b].ToString(CultureInfo.InvariantCulture);
+                        boxes[b].Background = err != null ? RevitTheme.Invalid : RevitTheme.Input;
+                        boxes[b].ToolTip = err ?? (b < 2 ? "Barras en horizontal, de izquierda a derecha (numeros encima del esquema)"
+                                                         : "Barras en vertical, de arriba abajo (numeros a la izquierda del esquema)");
+                    }
+                }
+            }
+            finally { _refreshingInner = false; }
         }
 
         private UIElement BuildTies()
@@ -762,6 +864,7 @@ namespace ColumnRebar
                 double hookDeg = HookAngle(scratch.Stirrups.HookTypeName);
                 double tieHookDeg = tiesEnabled ? HookAngle(scratch.Crossties.HookTypeName) : 0;
                 RefreshLines(scratch, plan != null && plan.Error == null ? plan : null);
+                RefreshInner(plan != null && plan.Error == null ? plan : null);
                 if (plan != null) _preview.Show(_selected.Section, plan, hookDeg, tieHookDeg); else _preview.Clear(text);
                 if (runs != null) _elevation.Show(_selected.Section, plan, runs, scratch); else _elevation.Clear(text);
                 _partitionPreview.Text = "Ejemplo: " + _selected.Partition(scratch, "estribo", "1") +
@@ -771,6 +874,7 @@ namespace ColumnRebar
             else
             {
                 RefreshLines(scratch, null);
+                RefreshInner(null);
                 _previewCaption.Text = "";
                 _preview.Clear("Sin elemento armable");
                 _elevation.Clear("");
@@ -793,6 +897,7 @@ namespace ColumnRebar
                 plan = RebarGenerator.PlanFor(item, cfg, db, dbi, ds, dt);
                 if (plan.Error != null) { text = item.Section.Describe() + " -> SIN ARMAR: " + plan.Error; return false; }
                 runs = RebarGenerator.RunsFor(item, cfg, out string warn);
+                if (plan.InteriorError != null) { text = item.Section.Describe() + " -> SIN ARMAR: " + plan.InteriorError; return false; }
                 int n = runs.Sum(r => r.Count);
                 text = item.Section.Describe() + "; " + plan.Describe() + "; " + n + " estribos por rectangulo" +
                        (warn != null ? " (" + warn + ")" : "");

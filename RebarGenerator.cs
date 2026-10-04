@@ -81,6 +81,7 @@ namespace ColumnRebar
             c.Plan = PlanFor(item, cfg, btLong.BarNominalDiameter, btInter.BarNominalDiameter, btStirrup.BarNominalDiameter,
                              btTie?.BarNominalDiameter ?? 0);
             if (c.Plan.Error != null) throw new InvalidOperationException(c.Plan.Error);
+            if (c.Plan.InteriorError != null) throw new InvalidOperationException(c.Plan.InteriorError);
             c.Result.Warnings.AddRange(c.Plan.Warnings);
 
             c.Runs = RunsFor(item, cfg, out string warn);
@@ -103,7 +104,7 @@ namespace ColumnRebar
             {
                 Cover = Mm(cfg.CoverMm), Ds = dsFt, DbCorner = dbCornerFt, DbInter = dbInterFt,
                 Fill = cfg.Longitudinal.FillMode,
-                Rows = item.RowOverrides, Cols = item.ColOverrides,
+                Rows = item.RowOverrides, Cols = item.ColOverrides, Inner = item.InnerStirrups,
                 TiesU = cfg.Crossties.Enabled && cfg.TiesU, TiesV = cfg.Crossties.Enabled && cfg.TiesV, Dt = dtFt,
                 Tol = Mm(cfg.PrismCheckToleranceMm)
             };
@@ -168,7 +169,7 @@ namespace ColumnRebar
         }
 
         // -----------------------------------------------------------------
-        // Estribos cerrados: un conjunto por rectangulo y tramo de la distribucion
+        // Estribos cerrados: un conjunto por rectangulo (y por estribo interior) y tramo de la distribucion
         // -----------------------------------------------------------------
         private static void Stirrups(Ctx c, RebarBarType bt)
         {
@@ -184,7 +185,7 @@ namespace ColumnRebar
                     XYZ p3 = s.World(r.U2, r.V1, z), p4 = s.World(r.U2, r.V2, z);
                     var curves = new List<Curve>();
                     AddLine(curves, p1, p2); AddLine(curves, p2, p3); AddLine(curves, p3, p4); AddLine(curves, p4, p1);
-                    string name = "estribo " + (st.Index + 1) + " " + run.Label;
+                    string name = "estribo " + (st.Index + 1) + (st.Interior ? " (interior)" : "") + " " + run.Label;
                     bool ok = Place(c, name, bt, RebarStyle.StirrupTie, c.StirrupHook, c.StirrupHookLeft, XYZ.BasisZ, curves,
                                     run.Count, run.Spacing, longitudinal: false, stirrup: (st.Index + 1).ToString(),
                                     code: CodeStirrup + " " + (st.Index + 1),

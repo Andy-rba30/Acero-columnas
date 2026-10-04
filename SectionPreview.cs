@@ -45,6 +45,8 @@ namespace ColumnRebar
         public static readonly Brush RequiredBrush = new SolidColorBrush(Color.FromRgb(0x8B, 0x2E, 0x2E));
         public static readonly Brush IntermediateBrush = new SolidColorBrush(Color.FromRgb(0xD9, 0x6C, 0x2A));
         public static readonly Brush TieBrush = new SolidColorBrush(Color.FromRgb(0x7A, 0x3E, 0x9D));
+        /// <summary>Numeros de posicion de barra (para elegir los estribos interiores).</summary>
+        public static readonly Brush PositionBrush = new SolidColorBrush(Color.FromRgb(0x2F, 0x5F, 0x9F));
 
         public static Brush StirrupBrush(int index) => StirrupBrushes[index % StirrupBrushes.Length];
 
@@ -167,7 +169,9 @@ namespace ColumnRebar
                     Width = st.Line.W * k, Height = st.Line.H * k
                 };
                 SetLeft(r, X(st.Line.U1)); SetTop(r, Y(st.Line.V2));
-                r.ToolTip = "Estribo " + (st.Index + 1) + ": " + Mm(st.Concrete.W) + " x " + Mm(st.Concrete.H) + " mm";
+                r.ToolTip = st.Interior
+                    ? "Estribo " + (st.Index + 1) + " (interior): " + Mm(st.Line.W + _plan.Ds) + " x " + Mm(st.Line.H + _plan.Ds) + " mm por fuera"
+                    : "Estribo " + (st.Index + 1) + ": " + Mm(st.Concrete.W) + " x " + Mm(st.Concrete.H) + " mm";
                 Children.Add(r);
                 Text("E" + (st.Index + 1), X(st.Line.CU) - 8, Y(st.Line.V2) - 16 + st.Index * 12, b, 11, true);
 
@@ -236,9 +240,22 @@ namespace ColumnRebar
             foreach (PlanLine l in _plan.Cols)
                 Text(l.Name, X(l.Coord) - 8, Y(0) + 4, Brushes.DimGray, 10, true);
 
+            // posiciones de barra con las que se eligen los estribos interiores (solo si la columna tiene alguno):
+            // encima, de izquierda a derecha; a la izquierda de las filas, de arriba abajo
+            if (_plan.Opt.Inner != null && _plan.Opt.Inner.Count > 0)
+            {
+                for (int i = 0; i < _plan.BarUs.Count; i++)
+                    Text((i + 1).ToString(CultureInfo.InvariantCulture), X(_plan.BarUs[i]) - (i >= 9 ? 6 : 3), Y(_s.Depth) - 16, PositionBrush, 9, true);
+                for (int i = 0; i < _plan.BarVs.Count; i++)
+                    Text((i + 1).ToString(CultureInfo.InvariantCulture), X(0) - 40, Y(_plan.BarVs[i]) - 7, PositionBrush, 9, true);
+            }
+
             // resumen
             Text(_plan.Describe() + " | " + _plan.DescribeLines(), 8, H - 20, Brushes.DimGray, 11);
-            if (_plan.Warnings.Count > 0) Text(string.Join(" | ", _plan.Warnings), 8, H - 36, Brushes.Firebrick, 11);
+            var alerts = new List<string>();
+            if (_plan.InteriorError != null) alerts.Add(_plan.InteriorError);
+            alerts.AddRange(_plan.Warnings);
+            if (alerts.Count > 0) Text(string.Join(" | ", alerts), 8, H - 36, Brushes.Firebrick, 11);
         }
 
         /// <summary>

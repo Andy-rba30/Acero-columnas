@@ -70,9 +70,21 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
   (la esquina interior de una L), el **reparto** dice dónde van: al hueco más grande,
   hacia la izquierda, hacia la derecha o simétrico (por pares izquierda-derecha; en
   las verticales, hacia abajo o hacia arriba). También se cambia línea a línea.
+- **Estribos interiores** (opcionales, columna a columna): además del estribo de cada
+  rectángulo se pueden añadir estribos cerrados que abrazan un grupo de barras, como el
+  estribo central que ata las tres barras del medio de las caras largas. Se eligen por
+  **posiciones de barra**: en horizontal de izquierda a derecha y en vertical de arriba
+  abajo, contadas sobre todas las barras de la sección (el esquema las numera en cuanto la
+  columna tiene alguno). En una sección de 830×450 con 7 barras por cara larga y 4 por
+  cara corta, *horizontal de la 3 a la 5, vertical de la 1 a la 4* da ese estribo central
+  (E2), de todo el alto. El estribo se ajusta por fuera a las barras elegidas, lleva la
+  misma distribución, tipo y gancho que los demás y no cambia ni añade barras. Tiene que
+  haber barra en sus cuatro esquinas, caber en el hormigón con recubrimiento (no puede
+  cruzar el vacío de una U) y no coincidir con otro estribo; si no, la casilla se pone en
+  rojo y la columna no se arma.
 - **Grapas** (opcionales): una por cada par de intermedias enfrentadas de un mismo
-  estribo, salvo donde ya pasa el lado de otro estribo. Se colocan en cada cota de
-  estribo, con sus ganchos.
+  estribo, salvo donde ya pasa el lado de otro estribo (también de un estribo interior).
+  Se colocan en cada cota de estribo, con sus ganchos.
 
 Con recubrimiento 40 mm, estribo Ø3/8" y longitudinal Ø5/8", las secciones del plano
 de referencia salen como están dibujadas subiendo solo la fila que toca: C-2
@@ -147,7 +159,10 @@ lo que no.
   general, cuadro por línea de la columna seleccionada (F1, F2..., V1, V2..., cada
   una con su total y su reparto; botón "mínimo" para volver a las obligadas),
   prolongaciones y patilla.
-- **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases.
+- **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases, y el
+  cuadro de **estribos interiores** de la columna seleccionada ("Anadir estribo interior"
+  propone el centrado de todo el alto; cada fila tiene las cuatro posiciones de barra y
+  "quitar").
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
   Partición (`{categoria}`, `{prefijo}`, `{marca}`, `{id}`, `{codigo}` / `{estribo}`,

@@ -24,6 +24,8 @@ namespace ColumnRebar
         public Rect Line;
         /// <summary>Ejes de las barras de esquina apoyadas en este estribo (Line menos medio estribo y media barra de esquina).</summary>
         public Rect BarLine;
+        /// <summary>Estribo interior pedido en la ventana (no sale de un rectangulo de la seccion): abraza barras ya colocadas.</summary>
+        public bool Interior;
     }
 
     /// <summary>Una grapa entre dos barras enfrentadas del mismo estribo (de A a B, eje de la grapa).</summary>
@@ -42,6 +44,25 @@ namespace ColumnRebar
         /// <summary>"auto", "left", "right", "center" o "" (el general).</summary>
         public string Fill = "";
         public LineSpec Clone() => new LineSpec { Count = Count, Fill = Fill };
+    }
+
+    /// <summary>
+    /// Estribo interior elegido para una columna (ademas del de cada rectangulo): abraza las
+    /// barras entre dos posiciones en horizontal (de izquierda a derecha) y dos en vertical
+    /// (de arriba abajo), contadas sobre todas las barras de la seccion desde 1 (ColumnPlan.BarUs
+    /// y BarVs). Ejemplo: en una seccion con 7 barras por cara larga, de 3 a 5 en horizontal y
+    /// de la primera a la ultima en vertical es el estribo central que ata las tres barras del medio.
+    /// </summary>
+    public sealed class InnerStirrupSpec
+    {
+        public int UFrom = 1, UTo = 1, VFrom = 1, VTo = 1;
+
+        /// <summary>Estribo centrado en horizontal (las tres barras del medio, o las dos si son pares) y de todo el alto.</summary>
+        public static InnerStirrupSpec Centered(int nu, int nv)
+        {
+            int a = nu % 2 == 1 ? (nu + 1) / 2 - 1 : nu / 2, b = nu % 2 == 1 ? (nu + 1) / 2 + 1 : nu / 2 + 1;
+            return new InnerStirrupSpec { UFrom = Math.Max(1, a), UTo = Math.Max(1, Math.Min(nu, b)), VFrom = 1, VTo = Math.Max(1, nv) };
+        }
     }
 
     /// <summary>
@@ -75,6 +96,8 @@ namespace ColumnRebar
         public string Fill = "auto";
         /// <summary>Elecciones por linea de esta columna (indice = fila de arriba abajo / vertical de izquierda a derecha); null = general.</summary>
         public IList<LineSpec> Rows, Cols;
+        /// <summary>Estribos interiores de esta columna; null o vacio = ninguno.</summary>
+        public IList<InnerStirrupSpec> Inner;
         public bool TiesU, TiesV;
         public double Dt;
         public double Tol;
@@ -123,6 +146,13 @@ namespace ColumnRebar
         public List<string> Warnings = new List<string>();
         public string Error;
         public PlanOptions Opt;
+        /// <summary>Posiciones de las barras de la seccion en horizontal (u, de izquierda a derecha) y en vertical (v, de arriba abajo): la numeracion de los estribos interiores.</summary>
+        public List<double> BarUs = new List<double>(), BarVs = new List<double>();
+        /// <summary>Un mensaje por estribo interior pedido (null si esta bien).</summary>
+        public List<string> InteriorErrors = new List<string>();
+
+        /// <summary>Estribos interiores mal definidos (fuera de rango, sin barra en una esquina, fuera del hormigon...): la columna no se arma. Null si todos estan bien.</summary>
+        public string InteriorError => InteriorErrors.Any(e => e != null) ? string.Join(" | ", InteriorErrors.Where(e => e != null)) : null;
 
         public double Cover => Opt.Cover;
         public double Ds => Opt.Ds;
@@ -137,7 +167,13 @@ namespace ColumnRebar
         public string Describe() =>
             Error != null ? Error
             : Bars.Count + " barras (" + RequiredCount + " en esquinas y cruces, " + IntermediateCount + " intermedias), " +
-              Stirrups.Count + (Stirrups.Count == 1 ? " estribo" : " estribos") + (Ties.Count > 0 ? ", " + Ties.Count + " grapas" : "");
+              Stirrups.Count + (Stirrups.Count == 1 ? " estribo" : " estribos") + DescribeInterior() + (Ties.Count > 0 ? ", " + Ties.Count + " grapas" : "");
+
+        private string DescribeInterior()
+        {
+            int n = Stirrups.Count(s => s.Interior);
+            return n == 0 ? "" : " (" + n + (n == 1 ? " interior)" : " interiores)");
+        }
 
         /// <summary>Resumen por linea: "F1 4, F2 3, F3 2 | V1 3, V2 2".</summary>
         public string DescribeLines() =>
@@ -308,12 +344,16 @@ namespace ColumnRebar
                     plan.Warnings.Add(line.Name + ": no caben " + missing + " barra(s) mas con 1.5 diametros libres");
             }
 
+            // --- estribos interiores: abrazan barras ya colocadas (no cambian barras ni lineas) ---
+            plan.MakeInterior(rects);
+
             // --- grapas: entre intermedias enfrentadas con la misma coordenada a lo largo del lado ---
+            // (los lados de los estribos interiores ya atan sus barras: ahi no va grapa)
             if (o.TiesU || o.TiesV)
                 foreach (PlanStirrup s in plan.Stirrups)
                     foreach ((int e1, int e2, bool on) in new[] { (0, 1, o.TiesV), (2, 3, o.TiesU) })
                     {
-                        if (!on) continue;
+                        if (!on || s.Interior) continue;
                         List<PlanBar> b1 = plan.EdgeBars(s, e1), b2 = plan.EdgeBars(s, e2);
                         foreach (PlanBar p in b1)
                         {
@@ -401,6 +441,64 @@ namespace ColumnRebar
                 for (int k = 1; k <= perGap[i]; k++) added.Add((i, gaps[i].a + gap * k / (perGap[i] + 1)));
             }
             return added;
+        }
+
+        /// <summary>
+        /// Numera las posiciones de las barras (BarUs, BarVs) y anade los estribos interiores
+        /// pedidos (Opt.Inner). Cada uno abraza las barras entre las posiciones elegidas y se
+        /// ajusta por fuera a ellas (eje a medio estribo de la barra), como se ataria en obra;
+        /// tiene que haber barra en sus cuatro esquinas y caber en el hormigon con recubrimiento.
+        /// Los mal definidos no se anaden y dejan su motivo en InteriorErrors.
+        /// </summary>
+        private void MakeInterior(IList<Rect> rects)
+        {
+            // misma posicion aunque cambie el diametro (esquina e intermedia de un mismo lado)
+            double r = 0.5 * Math.Abs(Opt.DbCorner - Opt.DbInter) + Opt.Tol;
+            BarUs = Rectilinear.Cluster(Bars.Select(b => b.P.U), r);
+            BarVs = Rectilinear.Cluster(Bars.Select(b => b.P.V), r);
+            BarVs.Reverse();   // de arriba abajo
+            if (Opt.Inner == null) return;
+            for (int k = 0; k < Opt.Inner.Count; k++)
+            {
+                int index = rects.Count + k;
+                string err = Opt.Inner[k] == null ? null : AddInterior(Opt.Inner[k], index, rects, r);
+                InteriorErrors.Add(err == null ? null : "estribo interior E" + (index + 1) + ": " + err);
+            }
+        }
+
+        private string AddInterior(InnerStirrupSpec spec, int index, IList<Rect> rects, double r)
+        {
+            int nu = BarUs.Count, nv = BarVs.Count;
+            int u1 = Math.Min(spec.UFrom, spec.UTo), u2 = Math.Max(spec.UFrom, spec.UTo);
+            int v1 = Math.Min(spec.VFrom, spec.VTo), v2 = Math.Max(spec.VFrom, spec.VTo);
+            if (u1 < 1 || u2 > nu) return "en horizontal las barras van de la 1 a la " + nu;
+            if (v1 < 1 || v2 > nv) return "en vertical las barras van de la 1 a la " + nv;
+            if (u1 == u2 || v1 == v2) return "tiene que abrazar al menos dos barras en horizontal y dos en vertical";
+
+            foreach (int i in new[] { u1, u2 })
+                foreach (int j in new[] { v1, v2 })
+                    if (!Bars.Any(b => Math.Abs(b.P.U - BarUs[i - 1]) <= r && Math.Abs(b.P.V - BarVs[j - 1]) <= r))
+                        return "no hay barra en su esquina " + i + " en horizontal, " + j + " en vertical";
+
+            double uLo = BarUs[u1 - 1] - r, uHi = BarUs[u2 - 1] + r;
+            double vLo = BarVs[v2 - 1] - r, vHi = BarVs[v1 - 1] + r;
+            List<PlanBar> held = Bars.Where(b => b.P.U >= uLo && b.P.U <= uHi && b.P.V >= vLo && b.P.V <= vHi).ToList();
+            double half = 0.5 * Opt.Ds;
+            var line = new Rect(held.Min(b => b.P.U - 0.5 * DiameterOf(b)) - half, held.Min(b => b.P.V - 0.5 * DiameterOf(b)) - half,
+                                held.Max(b => b.P.U + 0.5 * DiameterOf(b)) + half, held.Max(b => b.P.V + 0.5 * DiameterOf(b)) + half);
+            Rect concrete = line.Inset(-(Opt.Cover + half));
+            if (!rects.Any(q => q.Contains(concrete, Opt.Tol)))
+                return "se sale del hormigon o del recubrimiento (cruza un entrante de la seccion)";
+            foreach (PlanStirrup s in Stirrups)
+                if (s.Line.Contains(line, Opt.Tol) && line.Contains(s.Line, Opt.Tol))
+                    return "coincide con el estribo E" + (s.Index + 1) + (s.Interior ? "" : "; anade barras en sus lineas para tener donde apoyarlo");
+
+            Stirrups.Add(new PlanStirrup
+            {
+                Index = index, Interior = true, Concrete = concrete, Line = line,
+                BarLine = new Rect(held.Min(b => b.P.U), held.Min(b => b.P.V), held.Max(b => b.P.U), held.Max(b => b.P.V))
+            });
+            return null;
         }
 
         /// <summary>True si el lado de algun estribo (vertical si !horizontal) pasa por la coordenada dada y cubre el rango entero.</summary>
