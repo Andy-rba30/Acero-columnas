@@ -163,16 +163,30 @@ namespace ColumnRebar
             {
                 Brush b = StirrupBrush(st.Index);
                 double th = Math.Max(1.5, _plan.Ds * k);
-                var r = new Rectangle
+                if (st.Octagonal)
                 {
-                    Stroke = b, StrokeThickness = th, Fill = null, StrokeLineJoin = PenLineJoin.Round,
-                    Width = st.Line.W * k, Height = st.Line.H * k
-                };
-                SetLeft(r, X(st.Line.U1)); SetTop(r, Y(st.Line.V2));
-                r.ToolTip = st.Interior
-                    ? "Estribo " + (st.Index + 1) + " (interior): " + Mm(st.Line.W + _plan.Ds) + " x " + Mm(st.Line.H + _plan.Ds) + " mm por fuera"
-                    : "Estribo " + (st.Index + 1) + ": " + Mm(st.Concrete.W) + " x " + Mm(st.Concrete.H) + " mm";
-                Children.Add(r);
+                    // octogonal: el poligono de su eje (tramos rectos sobre el estribo rectangular, diagonales en las esquinas)
+                    var pg = new Polygon
+                    {
+                        Stroke = b, StrokeThickness = th, Fill = null, StrokeLineJoin = PenLineJoin.Round,
+                        ToolTip = "Estribo " + (st.Index + 1) + " (octogonal, " + st.Path.Count + " lados): pasa por " + st.Held.Count + " barras intermedias"
+                    };
+                    foreach (Pt p in st.Path) pg.Points.Add(new Point(X(p.U), Y(p.V)));
+                    Children.Add(pg);
+                }
+                else
+                {
+                    var r = new Rectangle
+                    {
+                        Stroke = b, StrokeThickness = th, Fill = null, StrokeLineJoin = PenLineJoin.Round,
+                        Width = st.Line.W * k, Height = st.Line.H * k
+                    };
+                    SetLeft(r, X(st.Line.U1)); SetTop(r, Y(st.Line.V2));
+                    r.ToolTip = st.Interior
+                        ? "Estribo " + (st.Index + 1) + " (interior): " + Mm(st.Line.W + _plan.Ds) + " x " + Mm(st.Line.H + _plan.Ds) + " mm por fuera"
+                        : "Estribo " + (st.Index + 1) + ": " + Mm(st.Concrete.W) + " x " + Mm(st.Concrete.H) + " mm";
+                    Children.Add(r);
+                }
                 Text("E" + (st.Index + 1), X(st.Line.CU) - 8, Y(st.Line.V2) - 16 + st.Index * 12, b, 11, true);
 
                 // ganchos en la esquina superior izquierda (donde empieza y acaba el estribo). El
@@ -182,11 +196,21 @@ namespace ColumnRebar
                 {
                     double hook = Math.Max(6 * _plan.Ds, 75 / FtToMm);   // pata (6 diametros, minimo 75 mm)
                     double gap = 1.2 * _plan.Ds;
-                    Pt c = new Pt(st.Line.U1, st.Line.V2);
-                    // extremo final: llega por el lado superior hacia la izquierda (d = -u), interior = -v
-                    HookLeg(X, Y, new Pt(c.U, c.V - gap), -1, 0, 0, -1, _hookDeg, hook, b, th);
-                    // extremo inicial: sale hacia abajo, es decir "llega" desde abajo (d = +v), interior = +u
-                    HookLeg(X, Y, new Pt(c.U + gap, c.V), 0, 1, 1, 0, _hookDeg, hook, b, th);
+                    if (st.Octagonal)
+                    {
+                        // empieza y acaba en el primer vertice: llega por el lado anterior y sale por el siguiente
+                        int n = st.Path.Count;
+                        Pt c = st.Path[0], prev = st.Path[n - 1], next = st.Path[1];
+                        HookAtVertex(X, Y, st, c, prev, next, gap, _hookDeg, hook, b, th);
+                    }
+                    else
+                    {
+                        Pt c = new Pt(st.Line.U1, st.Line.V2);
+                        // extremo final: llega por el lado superior hacia la izquierda (d = -u), interior = -v
+                        HookLeg(X, Y, new Pt(c.U, c.V - gap), -1, 0, 0, -1, _hookDeg, hook, b, th);
+                        // extremo inicial: sale hacia abajo, es decir "llega" desde abajo (d = +v), interior = +u
+                        HookLeg(X, Y, new Pt(c.U + gap, c.V), 0, 1, 1, 0, _hookDeg, hook, b, th);
+                    }
                 }
             }
 
@@ -271,6 +295,28 @@ namespace ColumnRebar
             Pt from = at;
             if (deg >= 170) from = new Pt(at.U + nu * 1.5 * _plan.Ds, at.V + nv * 1.5 * _plan.Ds);   // el pliegue de un gancho a 180 deja la pata por dentro
             Hook(X, Y, from, new Pt(from.U + lu * len, from.V + lv * len), brush, thickness);
+        }
+
+        /// <summary>
+        /// Los dos ganchos de un estribo poligonal en el vertice "c": el extremo final llega por el
+        /// lado prev-c y el inicial sale por c-next (es decir, "llega" desde next). Cada uno dobla hacia
+        /// el interior del estribo, separado "gap" del vertice sobre su propio lado.
+        /// </summary>
+        private void HookAtVertex(Func<double, double> X, Func<double, double> Y, PlanStirrup st, Pt c, Pt prev, Pt next,
+                                  double gap, double deg, double len, Brush brush, double thickness)
+        {
+            foreach (Pt other in new[] { prev, next })
+            {
+                double du = c.U - other.U, dv = c.V - other.V;
+                double l = Math.Sqrt(du * du + dv * dv);
+                if (l < 1e-9) continue;
+                du /= l; dv /= l;   // direccion de llegada al vertice (del otro extremo del lado hacia c)
+                // normal hacia el interior del estribo
+                double nu = -dv, nv = du;
+                if ((st.Line.CU - c.U) * nu + (st.Line.CV - c.V) * nv < 0) { nu = -nu; nv = -nv; }
+                // como en el rectangular: el extremo se dibuja un poco hacia dentro de su lado
+                HookLeg(X, Y, new Pt(c.U + nu * gap, c.V + nv * gap), du, dv, nu, nv, deg, len, brush, thickness);
+            }
         }
 
         private void Hook(Func<double, double> X, Func<double, double> Y, Pt from, Pt to, Brush brush, double thickness)

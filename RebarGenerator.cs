@@ -180,12 +180,24 @@ namespace ColumnRebar
                 foreach (StirrupRun run in c.Runs)
                 {
                     double z = s.ZBase + run.Z0;
-                    // antihorario visto desde arriba, empezando y acabando en la esquina superior izquierda (ahi van los ganchos)
-                    XYZ p1 = s.World(r.U1, r.V2, z), p2 = s.World(r.U1, r.V1, z);
-                    XYZ p3 = s.World(r.U2, r.V1, z), p4 = s.World(r.U2, r.V2, z);
                     var curves = new List<Curve>();
-                    AddLine(curves, p1, p2); AddLine(curves, p2, p3); AddLine(curves, p3, p4); AddLine(curves, p4, p1);
-                    string name = "estribo " + (st.Index + 1) + (st.Interior ? " (interior)" : "") + " " + run.Label;
+                    if (st.Octagonal)
+                    {
+                        // octogonal: sus vertices ya vienen antihorarios empezando donde van los ganchos
+                        for (int i = 0; i < st.Path.Count; i++)
+                        {
+                            Pt a = st.Path[i], b = st.Path[(i + 1) % st.Path.Count];
+                            AddLine(curves, s.World(a.U, a.V, z), s.World(b.U, b.V, z));
+                        }
+                    }
+                    else
+                    {
+                        // antihorario visto desde arriba, empezando y acabando en la esquina superior izquierda (ahi van los ganchos)
+                        XYZ p1 = s.World(r.U1, r.V2, z), p2 = s.World(r.U1, r.V1, z);
+                        XYZ p3 = s.World(r.U2, r.V1, z), p4 = s.World(r.U2, r.V2, z);
+                        AddLine(curves, p1, p2); AddLine(curves, p2, p3); AddLine(curves, p3, p4); AddLine(curves, p4, p1);
+                    }
+                    string name = "estribo " + (st.Index + 1) + (st.Octagonal ? " (octogonal)" : st.Interior ? " (interior)" : "") + " " + run.Label;
                     bool ok = Place(c, name, bt, RebarStyle.StirrupTie, c.StirrupHook, c.StirrupHookLeft, XYZ.BasisZ, curves,
                                     run.Count, run.Spacing, longitudinal: false, stirrup: (st.Index + 1).ToString(),
                                     code: CodeStirrup + " " + (st.Index + 1),

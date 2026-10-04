@@ -50,8 +50,10 @@ namespace ColumnRebar
         private TextBlock _innerCaption;
         private StackPanel _innerList;
         private ScrollViewer _innerScroll;
-        private Button _innerAdd;
-        private readonly List<(InnerStirrupSpec spec, TextBox[] boxes)> _innerRows = new List<(InnerStirrupSpec, TextBox[])>();
+        private Button _innerAdd, _innerAddOctagon;
+        private readonly List<(InnerStirrupSpec spec, ComboBox shape, TextBox[] boxes)> _innerRows = new List<(InnerStirrupSpec, ComboBox, TextBox[])>();
+        private static readonly string[] InnerShapes = { InnerStirrupSpec.ShapeRect, InnerStirrupSpec.ShapeOctagon };
+        private static readonly string[] InnerShapeLabels = { "rectangular", "octogonal" };
         private HostAnalysis _innerFor;
         private int _innerCount = -1;
         private ColumnPlan _innerPlan;
@@ -479,7 +481,26 @@ namespace ColumnRebar
                 Propagate(_innerFor);
                 Refresh();
             };
-            panel.Children.Add(_innerAdd);
+            _innerAddOctagon = new Button
+            {
+                Content = "Anadir estribo octogonal", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 2, 4, 2), HorizontalAlignment = HorizontalAlignment.Left,
+                ToolTip = "Estribo octogonal (el \"1 octogonal 3/8\" de los planos): pasa por dos barras intermedias de cada cara de un estribo " +
+                          "rectangular y corta las esquinas en diagonal. En horizontal se eligen las barras de las caras de arriba y abajo; en " +
+                          "vertical, las de las caras izquierda y derecha. Se propone por las intermedias mas cercanas a las esquinas. " +
+                          "Con una sola barra por cara (misma posicion de ida y vuelta) sale el rombo. Lleva la misma distribucion y el mismo " +
+                          "gancho que los demas estribos y vale tambien para las columnas iguales."
+            };
+            _innerAddOctagon.Click += (s, e) =>
+            {
+                if (_innerFor == null || _innerPlan == null) return;
+                _innerFor.InnerStirrups.Add(InnerStirrupSpec.Octagon(_innerPlan.BarUs.Count, _innerPlan.BarVs.Count));
+                Propagate(_innerFor);
+                Refresh();
+            };
+            var addRow = new StackPanel { Orientation = Orientation.Horizontal };
+            addRow.Children.Add(_innerAdd);
+            addRow.Children.Add(_innerAddOctagon);
+            panel.Children.Add(addRow);
             group.Content = panel;
             return group;
         }
@@ -500,6 +521,7 @@ namespace ColumnRebar
             try
             {
                 _innerAdd.IsEnabled = item != null && plan != null;
+                _innerAddOctagon.IsEnabled = item != null && plan != null;
                 _innerCaption.Text = item == null ? "Estribos interiores: selecciona una columna armable en la lista"
                     : "Estribos interiores de " + item.Tag.Trim() + TwinsNote(Twins(item).Count) + ": " + (n == 0 ? "ninguno" : n.ToString(CultureInfo.InvariantCulture)) +
                       (plan != null && n > 0 ? " (barras de 1 a " + plan.BarUs.Count + " en horizontal y de 1 a " + plan.BarVs.Count + " en vertical, numeradas en el esquema)" : "");
@@ -515,6 +537,17 @@ namespace ColumnRebar
                         int number = item.Section.Rects.Count + k + 1;
                         var row = new StackPanel { Orientation = Orientation.Horizontal };
                         row.Children.Add(new TextBlock { Text = "E" + number, Width = 30, FontWeight = FontWeights.SemiBold, Foreground = SectionPreview.StirrupBrush(number - 1), Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
+                        var shape = new ComboBox { Margin = Pad, Width = 100, ToolTip = "Forma del estribo: rectangular (abraza las barras entre las posiciones) u octogonal (pasa por las barras elegidas de cada cara y corta las esquinas en diagonal)" };
+                        foreach (string l in InnerShapeLabels) shape.Items.Add(l);
+                        shape.SelectedIndex = spec.Octagonal ? 1 : 0;
+                        shape.SelectionChanged += (sn, e) =>
+                        {
+                            if (_refreshingInner) return;
+                            spec.Shape = InnerShapes[Math.Max(0, shape.SelectedIndex)];
+                            Propagate(item);
+                            Refresh();
+                        };
+                        row.Children.Add(shape);
                         var boxes = new TextBox[4];
                         string[] labels = { "horizontal: de la", "a la", "   vertical: de la", "a la" };
                         for (int b = 0; b < 4; b++)
@@ -537,20 +570,24 @@ namespace ColumnRebar
                         remove.Click += (sn, e) => { item.InnerStirrups.Remove(spec); Propagate(item); Refresh(); };
                         row.Children.Add(remove);
                         _innerList.Children.Add(row);
-                        _innerRows.Add((spec, boxes));
+                        _innerRows.Add((spec, shape, boxes));
                     }
                 }
                 for (int k = 0; k < _innerRows.Count; k++)
                 {
-                    (InnerStirrupSpec spec, TextBox[] boxes) = _innerRows[k];
+                    (InnerStirrupSpec spec, ComboBox shape, TextBox[] boxes) = _innerRows[k];
                     int[] values = { spec.UFrom, spec.UTo, spec.VFrom, spec.VTo };
                     string err = plan != null && k < plan.InteriorErrors.Count ? plan.InteriorErrors[k] : null;
+                    shape.SelectedIndex = spec.Octagonal ? 1 : 0;
                     for (int b = 0; b < 4; b++)
                     {
                         if (!boxes[b].IsFocused) boxes[b].Text = values[b].ToString(CultureInfo.InvariantCulture);
                         boxes[b].Background = err != null ? RevitTheme.Invalid : RevitTheme.Input;
-                        boxes[b].ToolTip = err ?? (b < 2 ? "Barras en horizontal, de izquierda a derecha (numeros encima del esquema)"
-                                                         : "Barras en vertical, de arriba abajo (numeros a la izquierda del esquema)");
+                        boxes[b].ToolTip = err ?? (spec.Octagonal
+                            ? (b < 2 ? "Octogonal: barras de las caras de arriba y abajo por las que pasa, en horizontal de izquierda a derecha (numeros encima del esquema); la misma en las dos casillas = una sola barra por cara"
+                                     : "Octogonal: barras de las caras izquierda y derecha por las que pasa, en vertical de arriba abajo (numeros a la izquierda del esquema)")
+                            : (b < 2 ? "Barras en horizontal, de izquierda a derecha (numeros encima del esquema)"
+                                     : "Barras en vertical, de arriba abajo (numeros a la izquierda del esquema)"));
                     }
                 }
             }
@@ -621,7 +658,7 @@ namespace ColumnRebar
             LegendItem(legend, SectionPreview.RequiredBrush, "barra de esquina o cruce");
             LegendItem(legend, SectionPreview.IntermediateBrush, "barra intermedia");
             LegendItem(legend, SectionPreview.StirrupBrush(0), "estribo 1");
-            LegendItem(legend, SectionPreview.StirrupBrush(1), "estribo 2...");
+            LegendItem(legend, SectionPreview.StirrupBrush(1), "estribo 2... (interior u octogonal)");
             LegendItem(legend, SectionPreview.TieBrush, "grapa (con sus ganchos)");
             DockPanel.SetDock(legend, Dock.Bottom);
             secPanel.Children.Add(legend);

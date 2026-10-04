@@ -85,8 +85,24 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
   haber barra en sus cuatro esquinas, caber en el hormigón con recubrimiento (no puede
   cruzar el vacío de una U) y no coincidir con otro estribo; si no, la casilla se pone en
   rojo y la columna no se arma.
+- **Estribos octogonales** (el `1○Ø3/8"` de los planos, junto al `1□Ø3/8"`): un estribo
+  interior puede ser **octogonal** en vez de rectangular. Pasa por dos barras intermedias de
+  cada cara de un estribo rectangular y **corta las esquinas en diagonal**: en horizontal se
+  eligen las barras de las caras de arriba y abajo (posiciones de izquierda a derecha) y en
+  vertical las de las caras izquierda y derecha (de arriba abajo). En la P2 del plano
+  (450×450, 12Ø5/8", 4 barras por cara) es *horizontal de la 2 a la 3, vertical de la 2 a
+  la 3*, que es lo que propone el botón "Anadir estribo octogonal" (las intermedias más
+  cercanas a las esquinas). Sus tramos rectos van sobre el estribo rectangular (eje a medio
+  estribo más media barra de las barras, como se ata en obra) y solo las diagonales son
+  nuevas; las barras elegidas tienen que ser intermedias (en las esquinas no habría
+  diagonal) y existir las ocho. Con la **misma posición** de ida y vuelta en una dirección
+  pasa por una sola barra de esa cara (hexágono) y en las dos, el **rombo**. Las barras por
+  las que pasa quedan atadas en sus vértices: no llevan grapa. Se crea en Revit como un
+  estribo cerrado de 8 (6 o 4) lados con los mismos ganchos, distribución y tipo que los
+  demás, y pasa por las mismas redes de seguridad.
 - **Grapas** (opcionales): una por cada par de intermedias enfrentadas de un mismo
-  estribo, salvo donde ya pasa el lado de otro estribo (también de un estribo interior).
+  estribo, salvo donde ya pasa el lado de otro estribo (también de un estribo interior) o
+  la barra es un vértice de un estribo octogonal.
   Se colocan en cada cota de estribo, con sus ganchos.
 
 Con recubrimiento 40 mm, estribo Ø3/8" y longitudinal Ø5/8", las secciones del plano
@@ -170,15 +186,17 @@ lo que no.
   prolongaciones y patilla.
 - **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases, y el
   cuadro de **estribos interiores** de la columna seleccionada y de sus iguales, con su
-  propio scroll ("Anadir estribo interior" propone el centrado de todo el alto; cada fila
-  tiene las cuatro posiciones de barra y "quitar").
+  propio scroll ("Anadir estribo interior" propone el centrado de todo el alto y "Anadir
+  estribo octogonal" el que pasa por las intermedias más cercanas a las esquinas; cada fila
+  tiene la forma, rectangular u octogonal, las cuatro posiciones de barra y "quitar").
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
   Partición (`{categoria}`, `{prefijo}`, `{marca}`, `{id}`, `{codigo}` / `{estribo}`,
   `{tipo}`, `{familia}`, `{conjunto}`), con el ejemplo de la columna seleccionada. Si
   la plantilla no empieza por `{categoria} - {prefijo}-` la ventana avisa de que
   incumple el contrato. El pie muestra la versión del contrato ARBA-comun.
-- **Sección**: hormigón, cada estribo con su color y sus ganchos dibujados con el
+- **Sección**: hormigón, cada estribo con su color (los octogonales como polígono) y sus
+  ganchos dibujados con el
   ángulo del tipo elegido (90°, 135° o 180°; esquema), las etiquetas F1... y V1...
   de las líneas,
   grapas con sus ganchos y cada barra a su diámetro (rojo oscuro las obligadas,
