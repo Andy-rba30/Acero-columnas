@@ -50,7 +50,18 @@ namespace ColumnRebar
         private TextBlock _innerCaption;
         private StackPanel _innerList;
         private ScrollViewer _innerScroll;
-        private Button _innerAdd, _innerAddOctagon;
+        private Button _innerAdd;
+        private ComboBox _innerKind;
+        /// <summary>Tipos de estribo interior que se pueden anadir (los armados tipicos de los planos) y como se proponen.</summary>
+        private static readonly (string label, Func<int, int, InnerStirrupSpec> make)[] InnerKinds =
+        {
+            ("rectangular centrado, todo el alto (barras del medio de las caras largas)", InnerStirrupSpec.Centered),
+            ("rectangular centrado, todo el ancho (filas intermedias)", InnerStirrupSpec.CenteredAcross),
+            ("de dos barras, vertical (columna de barras del medio)", InnerStirrupSpec.TwoBarsVertical),
+            ("de dos barras, horizontal (fila de barras del medio)", InnerStirrupSpec.TwoBarsHorizontal),
+            ("octogonal (dos intermedias por cara, corta las esquinas)", InnerStirrupSpec.Octagon),
+            ("rombo (una barra por cara)", InnerStirrupSpec.Rhombus),
+        };
         private readonly List<(InnerStirrupSpec spec, ComboBox shape, TextBox[] boxes)> _innerRows = new List<(InnerStirrupSpec, ComboBox, TextBox[])>();
         private static readonly string[] InnerShapes = { InnerStirrupSpec.ShapeRect, InnerStirrupSpec.ShapeOctagon };
         private static readonly string[] InnerShapeLabels = { "rectangular", "octogonal" };
@@ -467,39 +478,37 @@ namespace ColumnRebar
                 (sv.Parent as UIElement)?.RaiseEvent(up);
             };
             panel.Children.Add(_innerScroll);
+            // tipo de estribo interior que se anade: los armados tipicos de los planos; luego se ajusta en su fila
+            var addRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 2, 4, 2) };
+            addRow.Children.Add(new TextBlock { Text = "Anadir estribo interior:", Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
+            _innerKind = new ComboBox
+            {
+                Margin = Pad, Width = 330,
+                ToolTip = "Tipo de estribo interior que se anade (despues se puede cambiar su forma y sus barras en la fila):\n" +
+                          "- rectangular centrado, todo el alto: abraza las barras del medio de las caras largas;\n" +
+                          "- rectangular centrado, todo el ancho: abraza las filas intermedias de izquierda a derecha;\n" +
+                          "- de dos barras: estribo delgado que abraza una sola columna o fila de barras (la del medio);\n" +
+                          "- octogonal: pasa por dos intermedias de cada cara y corta las esquinas en diagonal (el \"1 octogonal 3/8\" de los planos);\n" +
+                          "- rombo: pasa por la barra del medio de cada cara.\n" +
+                          "Todos llevan la misma distribucion, tipo y gancho que los demas estribos y valen tambien para las columnas iguales."
+            };
+            foreach (var kind in InnerKinds) _innerKind.Items.Add(kind.label);
+            _innerKind.SelectedIndex = 0;
+            addRow.Children.Add(_innerKind);
             _innerAdd = new Button
             {
-                Content = "Anadir estribo interior", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 2, 4, 2), HorizontalAlignment = HorizontalAlignment.Left,
-                ToolTip = "Estribo cerrado que abraza un grupo de barras de esta columna, por ejemplo las tres del medio de las caras largas. " +
-                          "Se ajusta por fuera a las barras elegidas, con la misma distribucion y el mismo gancho que los demas estribos. " +
-                          "Vale tambien para las demas columnas seleccionadas con la misma seccion."
+                Content = "Anadir", Padding = new Thickness(8, 2, 8, 2), Margin = Pad,
+                ToolTip = "Anade a esta columna (y a sus iguales) un estribo interior del tipo elegido, propuesto sobre sus barras; en su fila se ajustan la forma y las posiciones."
             };
             _innerAdd.Click += (s, e) =>
             {
                 if (_innerFor == null || _innerPlan == null) return;
-                _innerFor.InnerStirrups.Add(InnerStirrupSpec.Centered(_innerPlan.BarUs.Count, _innerPlan.BarVs.Count));
+                int k = Math.Max(0, _innerKind.SelectedIndex);
+                _innerFor.InnerStirrups.Add(InnerKinds[k].make(_innerPlan.BarUs.Count, _innerPlan.BarVs.Count));
                 Propagate(_innerFor);
                 Refresh();
             };
-            _innerAddOctagon = new Button
-            {
-                Content = "Anadir estribo octogonal", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 2, 4, 2), HorizontalAlignment = HorizontalAlignment.Left,
-                ToolTip = "Estribo octogonal (el \"1 octogonal 3/8\" de los planos): pasa por dos barras intermedias de cada cara de un estribo " +
-                          "rectangular y corta las esquinas en diagonal. En horizontal se eligen las barras de las caras de arriba y abajo; en " +
-                          "vertical, las de las caras izquierda y derecha. Se propone por las intermedias mas cercanas a las esquinas. " +
-                          "Con una sola barra por cara (misma posicion de ida y vuelta) sale el rombo. Lleva la misma distribucion y el mismo " +
-                          "gancho que los demas estribos y vale tambien para las columnas iguales."
-            };
-            _innerAddOctagon.Click += (s, e) =>
-            {
-                if (_innerFor == null || _innerPlan == null) return;
-                _innerFor.InnerStirrups.Add(InnerStirrupSpec.Octagon(_innerPlan.BarUs.Count, _innerPlan.BarVs.Count));
-                Propagate(_innerFor);
-                Refresh();
-            };
-            var addRow = new StackPanel { Orientation = Orientation.Horizontal };
             addRow.Children.Add(_innerAdd);
-            addRow.Children.Add(_innerAddOctagon);
             panel.Children.Add(addRow);
             group.Content = panel;
             return group;
@@ -521,7 +530,7 @@ namespace ColumnRebar
             try
             {
                 _innerAdd.IsEnabled = item != null && plan != null;
-                _innerAddOctagon.IsEnabled = item != null && plan != null;
+                _innerKind.IsEnabled = item != null && plan != null;
                 _innerCaption.Text = item == null ? "Estribos interiores: selecciona una columna armable en la lista"
                     : "Estribos interiores de " + item.Tag.Trim() + TwinsNote(Twins(item).Count) + ": " + (n == 0 ? "ninguno" : n.ToString(CultureInfo.InvariantCulture)) +
                       (plan != null && n > 0 ? " (barras de 1 a " + plan.BarUs.Count + " en horizontal y de 1 a " + plan.BarVs.Count + " en vertical, numeradas en el esquema)" : "");
@@ -537,7 +546,7 @@ namespace ColumnRebar
                         int number = item.Section.Rects.Count + k + 1;
                         var row = new StackPanel { Orientation = Orientation.Horizontal };
                         row.Children.Add(new TextBlock { Text = "E" + number, Width = 30, FontWeight = FontWeights.SemiBold, Foreground = SectionPreview.StirrupBrush(number - 1), Margin = Pad, VerticalAlignment = VerticalAlignment.Center });
-                        var shape = new ComboBox { Margin = Pad, Width = 100, ToolTip = "Forma del estribo: rectangular (abraza las barras entre las posiciones) u octogonal (pasa por las barras elegidas de cada cara y corta las esquinas en diagonal)" };
+                        var shape = new ComboBox { Margin = Pad, Width = 100, ToolTip = "Forma del estribo: rectangular (abraza las barras entre las posiciones; con la misma posicion de ida y vuelta en una direccion es el delgado de dos barras) u octogonal (pasa por las barras elegidas de cada cara y corta las esquinas en diagonal; con una barra por cara, el rombo)" };
                         foreach (string l in InnerShapeLabels) shape.Items.Add(l);
                         shape.SelectedIndex = spec.Octagonal ? 1 : 0;
                         shape.SelectionChanged += (sn, e) =>

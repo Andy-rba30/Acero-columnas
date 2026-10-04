@@ -86,6 +86,27 @@ namespace ColumnRebar
             return new InnerStirrupSpec { UFrom = Math.Max(1, a), UTo = Math.Max(1, Math.Min(nu, b)), VFrom = 1, VTo = Math.Max(1, nv) };
         }
 
+        /// <summary>Estribo centrado en vertical (las filas del medio) y de todo el ancho: el que ata las intermedias de las caras largas.</summary>
+        public static InnerStirrupSpec CenteredAcross(int nu, int nv)
+        {
+            int a = nv % 2 == 1 ? (nv + 1) / 2 - 1 : nv / 2, b = nv % 2 == 1 ? (nv + 1) / 2 + 1 : nv / 2 + 1;
+            return new InnerStirrupSpec { UFrom = 1, UTo = Math.Max(1, nu), VFrom = Math.Max(1, a), VTo = Math.Max(1, Math.Min(nv, b)) };
+        }
+
+        private static int Middle(int n) => Math.Max(1, (n + 1) / 2);
+
+        /// <summary>Estribo delgado de dos barras, vertical: abraza la columna de barras del medio de arriba abajo.</summary>
+        public static InnerStirrupSpec TwoBarsVertical(int nu, int nv) =>
+            new InnerStirrupSpec { UFrom = Middle(nu), UTo = Middle(nu), VFrom = 1, VTo = Math.Max(1, nv) };
+
+        /// <summary>Estribo delgado de dos barras, horizontal: abraza la fila de barras del medio de izquierda a derecha.</summary>
+        public static InnerStirrupSpec TwoBarsHorizontal(int nu, int nv) =>
+            new InnerStirrupSpec { UFrom = 1, UTo = Math.Max(1, nu), VFrom = Middle(nv), VTo = Middle(nv) };
+
+        /// <summary>Rombo: pasa por la barra del medio de cada cara (una sola barra por cara).</summary>
+        public static InnerStirrupSpec Rhombus(int nu, int nv) =>
+            new InnerStirrupSpec { Shape = ShapeOctagon, UFrom = Middle(nu), UTo = Middle(nu), VFrom = Middle(nv), VTo = Middle(nv) };
+
         /// <summary>Estribo octogonal por las intermedias mas cercanas a las esquinas (de la 2 a la penultima en cada direccion).</summary>
         public static InnerStirrupSpec Octagon(int nu, int nv) => new InnerStirrupSpec
         {
@@ -507,7 +528,8 @@ namespace ColumnRebar
             int v1 = Math.Min(spec.VFrom, spec.VTo), v2 = Math.Max(spec.VFrom, spec.VTo);
             if (u1 < 1 || u2 > nu) return "en horizontal las barras van de la 1 a la " + nu;
             if (v1 < 1 || v2 > nv) return "en vertical las barras van de la 1 a la " + nv;
-            if (u1 == u2 || v1 == v2) return "tiene que abrazar al menos dos barras en horizontal y dos en vertical";
+            // una sola linea de barras (u1 == u2 o v1 == v2) es el estribo delgado "de dos barras" de los planos
+            if (u1 == u2 && v1 == v2) return "tiene que abrazar al menos dos barras";
 
             foreach (int i in new[] { u1, u2 })
                 foreach (int j in new[] { v1, v2 })

@@ -84,15 +84,23 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
   misma distribución, tipo y gancho que los demás y no cambia ni añade barras. Tiene que
   haber barra en sus cuatro esquinas, caber en el hormigón con recubrimiento (no puede
   cruzar el vacío de una U) y no coincidir con otro estribo; si no, la casilla se pone en
-  rojo y la columna no se arma.
+  rojo y la columna no se arma. Con la **misma posición** de ida y vuelta en una dirección
+  el estribo abraza una sola columna o fila de barras: es el **estribo delgado de dos
+  barras** de los planos (el vertical del medio de una P1 de 400×550 con `3□Ø3/8"`: el
+  exterior, ese y el que abraza las filas intermedias de todo el ancho).
+- Al **añadir** un estribo interior se elige su **tipo** entre los armados típicos y el
+  plugin lo propone sobre las barras de la columna (luego se ajusta en su fila): rectangular
+  centrado de todo el alto (las barras del medio de las caras largas), rectangular centrado
+  de todo el ancho (las filas intermedias), de dos barras vertical (la columna de barras del
+  medio), de dos barras horizontal (la fila del medio), octogonal y rombo.
 - **Estribos octogonales** (el `1○Ø3/8"` de los planos, junto al `1□Ø3/8"`): un estribo
   interior puede ser **octogonal** en vez de rectangular. Pasa por dos barras intermedias de
   cada cara de un estribo rectangular y **corta las esquinas en diagonal**: en horizontal se
   eligen las barras de las caras de arriba y abajo (posiciones de izquierda a derecha) y en
   vertical las de las caras izquierda y derecha (de arriba abajo). En la P2 del plano
   (450×450, 12Ø5/8", 4 barras por cara) es *horizontal de la 2 a la 3, vertical de la 2 a
-  la 3*, que es lo que propone el botón "Anadir estribo octogonal" (las intermedias más
-  cercanas a las esquinas). Sus tramos rectos van sobre el estribo rectangular (eje a medio
+  la 3*, que es lo que propone el tipo *octogonal* al añadir (las intermedias más cercanas a
+  las esquinas). Sus tramos rectos van sobre el estribo rectangular (eje a medio
   estribo más media barra de las barras, como se ata en obra) y solo las diagonales son
   nuevas; las barras elegidas tienen que ser intermedias (en las esquinas no habría
   diagonal) y existir las ocho. Con la **misma posición** de ida y vuelta en una dirección
@@ -186,9 +194,10 @@ lo que no.
   prolongaciones y patilla.
 - **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases, y el
   cuadro de **estribos interiores** de la columna seleccionada y de sus iguales, con su
-  propio scroll ("Anadir estribo interior" propone el centrado de todo el alto y "Anadir
-  estribo octogonal" el que pasa por las intermedias más cercanas a las esquinas; cada fila
-  tiene la forma, rectangular u octogonal, las cuatro posiciones de barra y "quitar").
+  propio scroll (al añadir se elige el tipo: rectangular centrado de todo el alto o de todo
+  el ancho, de dos barras vertical u horizontal, octogonal o rombo, y se propone sobre las
+  barras; cada fila tiene la forma, rectangular u octogonal, las cuatro posiciones de barra
+  y "quitar").
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
   Partición (`{categoria}`, `{prefijo}`, `{marca}`, `{id}`, `{codigo}` / `{estribo}`,
