@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Arba.Comun;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
@@ -43,6 +44,18 @@ namespace ColumnRebar
             List<LineSpec> list = Overrides(horizontal);
             while (list.Count <= index) list.Add(null);
             list[index] = spec;
+        }
+
+        /// <summary>
+        /// Copia de otra columna (de la misma seccion) sus barras por linea y sus estribos interiores,
+        /// para que al armar varias columnas iguales a la vez todas se armen igual.
+        /// </summary>
+        public void CopyLinesAndInnerFrom(HostAnalysis src)
+        {
+            if (src == null || ReferenceEquals(src, this)) return;
+            RowOverrides = src.RowOverrides.Select(s => s?.Clone()).ToList();
+            ColOverrides = src.ColOverrides.Select(s => s?.Clone()).ToList();
+            InnerStirrups = src.InnerStirrups.Where(s => s != null).Select(s => s.Clone()).ToList();
         }
 
         public bool CanBuild => Error == null && Section != null;

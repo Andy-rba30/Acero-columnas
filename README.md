@@ -64,13 +64,16 @@ sección variable) se **rechaza** con un mensaje claro y sin crear ninguna barra
   3 y 3; una T, 3 filas y 4 verticales. Cada línea lleva un **total de barras**;
   el mínimo son sus obligadas (el armado que cierra los estribos: F1 2, F2 3, F3 3
   en una L típica) y en el cuadro de la columna seleccionada, con una entrada por
-  línea, solo se puede **subir**. Las que faltan se añaden en los huecos entre obligadas
+  línea, solo se puede **subir**; lo elegido vale también para las demás columnas
+  seleccionadas con la **misma sección** (mismas medidas y rectángulos), así que al armar
+  varias iguales a la vez todas se arman igual. Las que faltan se añaden en los huecos entre obligadas
   (sin cruzar nunca el vacío de una U), nunca a menos de 1.5 diámetros libres (si no
   caben, la casilla se pone en rojo y se avisa). Cuando otro estribo parte la línea
   (la esquina interior de una L), el **reparto** dice dónde van: al hueco más grande,
   hacia la izquierda, hacia la derecha o simétrico (por pares izquierda-derecha; en
   las verticales, hacia abajo o hacia arriba). También se cambia línea a línea.
-- **Estribos interiores** (opcionales, columna a columna): además del estribo de cada
+- **Estribos interiores** (opcionales, por columna; las columnas de la misma sección los
+  comparten): además del estribo de cada
   rectángulo se pueden añadir estribos cerrados que abrazan un grupo de barras, como el
   estribo central que ata las tres barras del medio de las caras largas. Se eligen por
   **posiciones de barra**: en horizontal de izquierda a derecha y en vertical de arriba
@@ -156,13 +159,14 @@ lo que no.
   tiene su **distribución de estribos** y su **separación de longitudinales** propias
   (vacío = valor general). Clic en una fila para verla en los esquemas.
 - **Barras longitudinales**: tipo de las de esquina y de las intermedias, reparto
-  general, cuadro por línea de la columna seleccionada (F1, F2..., V1, V2..., cada
-  una con su total y su reparto; botón "mínimo" para volver a las obligadas),
+  general, cuadro por línea de la columna seleccionada y de las demás con la misma
+  sección (F1, F2..., V1, V2..., cada una con su total y su reparto; botón "mínimo"
+  para volver a las obligadas),
   prolongaciones y patilla.
 - **Estribos**: tipo, gancho, giro del gancho, distribución, simetría y desfases, y el
-  cuadro de **estribos interiores** de la columna seleccionada ("Anadir estribo interior"
-  propone el centrado de todo el alto; cada fila tiene las cuatro posiciones de barra y
-  "quitar").
+  cuadro de **estribos interiores** de la columna seleccionada y de sus iguales, con su
+  propio scroll ("Anadir estribo interior" propone el centrado de todo el alto; cada fila
+  tiene las cuatro posiciones de barra y "quitar").
 - **Grapas**: activar, tipo, gancho y dirección.
 - **Recubrimiento y partición**: recubrimiento al estribo y plantilla del parámetro
   Partición (`{categoria}`, `{prefijo}`, `{marca}`, `{id}`, `{codigo}` / `{estribo}`,

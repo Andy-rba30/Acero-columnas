@@ -57,6 +57,8 @@ namespace ColumnRebar
     {
         public int UFrom = 1, UTo = 1, VFrom = 1, VTo = 1;
 
+        public InnerStirrupSpec Clone() => new InnerStirrupSpec { UFrom = UFrom, UTo = UTo, VFrom = VFrom, VTo = VTo };
+
         /// <summary>Estribo centrado en horizontal (las tres barras del medio, o las dos si son pares) y de todo el alto.</summary>
         public static InnerStirrupSpec Centered(int nu, int nv)
         {

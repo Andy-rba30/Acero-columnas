@@ -49,6 +49,7 @@ namespace ColumnRebar
         /// <summary>Cuadro de estribos interiores de la columna seleccionada.</summary>
         private TextBlock _innerCaption;
         private StackPanel _innerList;
+        private ScrollViewer _innerScroll;
         private Button _innerAdd;
         private readonly List<(InnerStirrupSpec spec, TextBox[] boxes)> _innerRows = new List<(InnerStirrupSpec, TextBox[])>();
         private HostAnalysis _innerFor;
@@ -230,6 +231,25 @@ namespace ColumnRebar
                 kv.Value.Background = kv.Key == item ? SelectedBrush : Brushes.Transparent;
         }
 
+        /// <summary>
+        /// Las demas columnas armables con la misma seccion que la dada (mismas medidas y rectangulos).
+        /// Comparten barras por linea y estribos interiores: al armar varias iguales a la vez se arman igual.
+        /// </summary>
+        private List<HostAnalysis> Twins(HostAnalysis item)
+        {
+            if (item == null || !item.CanBuild) return new List<HostAnalysis>();
+            double tol = ColumnSection.Mm(_cfg.PrismCheckToleranceMm);
+            return _items.Where(i => !ReferenceEquals(i, item) && i.CanBuild && i.Section.SameSectionAs(item.Section, tol)).ToList();
+        }
+
+        /// <summary>Lleva las barras por linea y los estribos interiores de la columna a sus iguales.</summary>
+        private void Propagate(HostAnalysis item)
+        {
+            foreach (HostAnalysis twin in Twins(item)) twin.CopyLinesAndInnerFrom(item);
+        }
+
+        private static string TwinsNote(int n) => n == 0 ? "" : " y " + n + (n == 1 ? " columna igual" : " columnas iguales");
+
         private UIElement BuildLongitudinal()
         {
             var group = new GroupBox { Header = "Barras longitudinales", Padding = new Thickness(4) };
@@ -317,7 +337,7 @@ namespace ColumnRebar
                     _linesGrid.RowDefinitions.Clear();
                     _linesGrid.ColumnDefinitions.Clear();
                     _linesCaption.Text = item == null || plan == null ? "Barras por linea: selecciona una columna armable en la lista"
-                        : "Barras por linea de " + item.Tag.Trim() + ": " + rows + " filas y " + cols + " verticales (minimo: sus esquinas y cruces; aqui solo se sube)";
+                        : "Barras por linea de " + item.Tag.Trim() + TwinsNote(Twins(item).Count) + ": " + rows + " filas y " + cols + " verticales (minimo: sus esquinas y cruces; aqui solo se sube)";
                     if (item == null || plan == null) return;
                     foreach (double w in new[] { 120, 50, 150, 64 })
                         _linesGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
@@ -355,11 +375,11 @@ namespace ColumnRebar
                             Grid.SetRow(fill, row); Grid.SetColumn(fill, 2);
                             _linesGrid.Children.Add(count);
                             _linesGrid.Children.Add(fill);
-                            count.TextChanged += (sn, e) => { if (!_refreshingLines) { StoreLine(item, hz, idx, count, fill, ReadConfig(out _)); Refresh(); } };
+                            count.TextChanged += (sn, e) => { if (!_refreshingLines) { StoreLine(item, hz, idx, count, fill, ReadConfig(out _)); Propagate(item); Refresh(); } };
                             count.LostFocus += (sn, e) => Refresh();   // al salir se muestra el valor efectivo (nunca menor que el minimo)
-                            fill.SelectionChanged += (sn, e) => { if (!_refreshingLines) { StoreLine(item, hz, idx, count, fill, ReadConfig(out _)); Refresh(); } };
+                            fill.SelectionChanged += (sn, e) => { if (!_refreshingLines) { StoreLine(item, hz, idx, count, fill, ReadConfig(out _)); Propagate(item); Refresh(); } };
                             var reset = new Button { Content = "minimo", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Volver al minimo (esquinas y cruces) y al reparto por huecos mas grandes en esta linea" };
-                            reset.Click += (sn, e) => { item.SetOwn(hz, idx, null); Refresh(); };
+                            reset.Click += (sn, e) => { item.SetOwn(hz, idx, null); Propagate(item); Refresh(); };
                             Grid.SetRow(reset, row); Grid.SetColumn(reset, 3);
                             _linesGrid.Children.Add(reset);
                             _lineRows.Add((horizontal, i, count, fill));
@@ -428,17 +448,35 @@ namespace ColumnRebar
             _innerCaption = new TextBlock { Margin = new Thickness(4, 6, 4, 2), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
             panel.Children.Add(_innerCaption);
             _innerList = new StackPanel { Margin = new Thickness(4, 0, 4, 2) };
-            panel.Children.Add(_innerList);
+            // cada fila es mas ancha que el panel: scroll horizontal, y vertical si hay muchos estribos
+            _innerScroll = new ScrollViewer
+            {
+                Content = _innerList, MaxHeight = 170,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            };
+            // la rueda se queda aqui solo si este cuadro puede desplazarse en esa direccion; si no, sigue al panel de opciones
+            _innerScroll.PreviewMouseWheel += (s, e) =>
+            {
+                var sv = (ScrollViewer)s;
+                bool canScroll = e.Delta < 0 ? sv.VerticalOffset < sv.ScrollableHeight - 0.5 : sv.VerticalOffset > 0.5;
+                if (canScroll) return;
+                e.Handled = true;
+                var up = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta) { RoutedEvent = UIElement.MouseWheelEvent, Source = sv };
+                (sv.Parent as UIElement)?.RaiseEvent(up);
+            };
+            panel.Children.Add(_innerScroll);
             _innerAdd = new Button
             {
                 Content = "Anadir estribo interior", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(8, 2, 4, 2), HorizontalAlignment = HorizontalAlignment.Left,
                 ToolTip = "Estribo cerrado que abraza un grupo de barras de esta columna, por ejemplo las tres del medio de las caras largas. " +
-                          "Se ajusta por fuera a las barras elegidas, con la misma distribucion y el mismo gancho que los demas estribos."
+                          "Se ajusta por fuera a las barras elegidas, con la misma distribucion y el mismo gancho que los demas estribos. " +
+                          "Vale tambien para las demas columnas seleccionadas con la misma seccion."
             };
             _innerAdd.Click += (s, e) =>
             {
                 if (_innerFor == null || _innerPlan == null) return;
                 _innerFor.InnerStirrups.Add(InnerStirrupSpec.Centered(_innerPlan.BarUs.Count, _innerPlan.BarVs.Count));
+                Propagate(_innerFor);
                 Refresh();
             };
             panel.Children.Add(_innerAdd);
@@ -463,7 +501,7 @@ namespace ColumnRebar
             {
                 _innerAdd.IsEnabled = item != null && plan != null;
                 _innerCaption.Text = item == null ? "Estribos interiores: selecciona una columna armable en la lista"
-                    : "Estribos interiores de " + item.Tag.Trim() + ": " + (n == 0 ? "ninguno" : n.ToString(CultureInfo.InvariantCulture)) +
+                    : "Estribos interiores de " + item.Tag.Trim() + TwinsNote(Twins(item).Count) + ": " + (n == 0 ? "ninguno" : n.ToString(CultureInfo.InvariantCulture)) +
                       (plan != null && n > 0 ? " (barras de 1 a " + plan.BarUs.Count + " en horizontal y de 1 a " + plan.BarVs.Count + " en vertical, numeradas en el esquema)" : "");
                 if (rebuild)
                 {
@@ -488,6 +526,7 @@ namespace ColumnRebar
                             {
                                 if (_refreshingInner || !int.TryParse(box.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v)) return;
                                 if (field == 0) spec.UFrom = v; else if (field == 1) spec.UTo = v; else if (field == 2) spec.VFrom = v; else spec.VTo = v;
+                                Propagate(item);
                                 Refresh();
                             };
                             box.LostFocus += (sn, e) => Refresh();
@@ -495,7 +534,7 @@ namespace ColumnRebar
                             row.Children.Add(box);
                         }
                         var remove = new Button { Content = "quitar", Padding = new Thickness(6, 1, 6, 1), Margin = Pad, ToolTip = "Quitar este estribo interior" };
-                        remove.Click += (sn, e) => { item.InnerStirrups.Remove(spec); Refresh(); };
+                        remove.Click += (sn, e) => { item.InnerStirrups.Remove(spec); Propagate(item); Refresh(); };
                         row.Children.Add(remove);
                         _innerList.Children.Add(row);
                         _innerRows.Add((spec, boxes));

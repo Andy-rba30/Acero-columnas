@@ -65,6 +65,22 @@ namespace ColumnRebar
             return d + (JoinedNote ?? "");
         }
 
+        /// <summary>
+        /// Misma seccion que otra columna (mismas medidas y los mismos rectangulos, en coordenadas
+        /// locales, con tolerancia): sus lineas de barras y sus posiciones de barra coinciden, asi
+        /// que las barras por linea y los estribos interiores elegidos para una valen para la otra.
+        /// </summary>
+        public bool SameSectionAs(ColumnSection o, double tol)
+        {
+            if (o == null || Rects == null || o.Rects == null || Rects.Count != o.Rects.Count) return false;
+            if (Math.Abs(Width - o.Width) > tol || Math.Abs(Depth - o.Depth) > tol) return false;
+            foreach (Rect r in Rects)
+                if (!o.Rects.Any(q => Math.Abs(q.U1 - r.U1) <= tol && Math.Abs(q.V1 - r.V1) <= tol &&
+                                      Math.Abs(q.U2 - r.U2) <= tol && Math.Abs(q.V2 - r.V2) <= tol))
+                    return false;
+            return true;
+        }
+
         // ------------------------------------------------------------------
         // Deduccion
         // ------------------------------------------------------------------
