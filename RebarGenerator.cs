@@ -75,8 +75,8 @@ namespace ColumnRebar
                 ? btLong : FindBarType(doc, cfg.Longitudinal.IntermediateBarTypeName, "longitudinales intermedias");
             RebarBarType btStirrup = FindBarType(doc, cfg.Stirrups.BarTypeName, "estribos");
             RebarBarType btTie = cfg.Crossties.Enabled ? FindBarType(doc, cfg.Crossties.BarTypeName, "grapas") : null;
-            c.StirrupHook = FindHookType(doc, cfg.Stirrups.HookTypeName);
-            c.TieHook = cfg.Crossties.Enabled ? FindHookType(doc, cfg.Crossties.HookTypeName) : ElementId.InvalidElementId;
+            c.StirrupHook = FindHookType(doc, cfg.Stirrups.HookTypeName, c.Result.Warnings);
+            c.TieHook = cfg.Crossties.Enabled ? FindHookType(doc, cfg.Crossties.HookTypeName, c.Result.Warnings) : ElementId.InvalidElementId;
 
             c.Plan = PlanFor(item, cfg, btLong.BarNominalDiameter, btInter.BarNominalDiameter, btStirrup.BarNominalDiameter,
                              btTie?.BarNominalDiameter ?? 0);
@@ -463,24 +463,81 @@ namespace ColumnRebar
             return all.First(b => b.Name == match);
         }
 
-        /// <summary>Id del tipo de gancho, o InvalidElementId si el nombre esta vacio. Lanza si el nombre no existe.</summary>
-        public static ElementId FindHookType(Document doc, string name)
+        /// <summary>
+        /// Catalogo de ganchos de estilo Estribo/atadura, el unico que Revit admite en estribos y grapas: 90 grados
+        /// con prolongacion de 6 diametros, 135 con 6, 135 sismico con 8 y 180 con 4 (los mismos que trae Revit).
+        /// La ventana ofrece los de este catalogo cuyo angulo no tenga el proyecto entre sus ganchos de ese estilo,
+        /// y el tipo se crea en el proyecto al armar (FindHookType).
+        /// </summary>
+        public static readonly (string Name, double AngleDeg, double Multiplier)[] HookCatalog =
+        {
+            ("Estribo - 90", 90, 6),
+            ("Estribo - 135", 135, 6),
+            ("Estribo sismico - 135", 135, 8),
+            ("Estribo - 180", 180, 4),
+        };
+
+        /// <summary>
+        /// Id del tipo de gancho, o InvalidElementId si el nombre esta vacio. Si el proyecto no lo tiene pero es
+        /// del catalogo, lo crea (se llama dentro de la transaccion del armado) y lo anota en "notes". Lanza si
+        /// el nombre no existe o es un gancho de estilo Estandar.
+        /// </summary>
+        public static ElementId FindHookType(Document doc, string name, List<string> notes = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return ElementId.InvalidElementId;
             var all = AllHookTypes(doc);
             string match = NameMatch.First(all.Select(h => h.Name), name);
-            if (match == null)
-                throw new InvalidOperationException("el tipo de gancho \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana o deja el gancho vacio");
-            return all.First(h => h.Name == match).Id;
+            if (match != null) return all.First(h => h.Name == match).Id;
+
+            string entry = NameMatch.First(HookCatalog.Select(e => e.Name), name);
+            if (entry != null) return CreateCatalogHook(doc, HookCatalog.First(e => e.Name == entry), notes);
+
+            // Puede que el nombre exista pero sea un gancho de estilo Estandar: Revit no lo admite en barras de
+            // estilo Estribo/atadura (falla al crear la barra), asi que se avisa claro.
+            string other = NameMatch.First(HookTypesOf(doc).Select(h => h.Name), name);
+            if (other != null)
+                throw new InvalidOperationException("el tipo de gancho \"" + other + "\" es de estilo Estandar y Revit no lo admite en estribos ni grapas (estilo Estribo/atadura); elige uno de estilo Estribo/atadura (p. ej. \"Estribo - 135\") o deja el gancho vacio");
+            throw new InvalidOperationException("el tipo de gancho \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana o deja el gancho vacio");
         }
 
+        /// <summary>Crea en el proyecto el gancho Estribo/atadura del catalogo, admitido por todos los tipos de barra.</summary>
+        private static ElementId CreateCatalogHook(Document doc, (string Name, double AngleDeg, double Multiplier) e, List<string> notes)
+        {
+            RebarHookType h = RebarHookType.Create(doc, e.AngleDeg * Math.PI / 180, e.Multiplier);
+            try { h.Style = RebarStyle.StirrupTie; } catch { }
+            try { h.Name = e.Name; } catch { }
+            foreach (RebarBarType bt in AllBarTypes(doc))
+                try { if (!bt.GetHookPermission(h.Id)) bt.SetHookPermission(h.Id, true); } catch { }
+            notes?.Add("creado en el proyecto el tipo de gancho \"" + h.Name + "\" (Estribo/atadura, " + e.AngleDeg + " grados, prolongacion " + e.Multiplier + " diametros)");
+            return h.Id;
+        }
 
         public static List<RebarBarType> AllBarTypes(Document doc) =>
             new FilteredElementCollector(doc).OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
                 .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
 
+        /// <summary>
+        /// Tipos de gancho de estilo Estribo/atadura, los unicos que Revit admite en los estribos y las grapas
+        /// (se crean con RebarStyle.StirrupTie). Los de estilo Estandar se excluyen: asignados a una barra de
+        /// estilo Estribo/atadura, Revit falla al crearla.
+        /// </summary>
         public static List<RebarHookType> AllHookTypes(Document doc) =>
-            new FilteredElementCollector(doc).OfClass(typeof(RebarHookType)).Cast<RebarHookType>()
+            HookTypesOf(doc).Where(IsStirrupHook)
                 .OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+        /// <summary>Todos los tipos de gancho del proyecto, de cualquier estilo.</summary>
+        private static List<RebarHookType> HookTypesOf(Document doc)
+        {
+            var list = new FilteredElementCollector(doc).OfClass(typeof(RebarHookType)).Cast<RebarHookType>().ToList();
+            // respaldo: recorrer los tipos del proyecto por si el filtro por clase no los devuelve
+            if (list.Count == 0) list = new FilteredElementCollector(doc).WhereElementIsElementType().OfType<RebarHookType>().ToList();
+            return list;
+        }
+
+        /// <summary>True si el gancho es de estilo Estribo/atadura (si la API no lo dice, se admite).</summary>
+        public static bool IsStirrupHook(RebarHookType h)
+        {
+            try { return h.Style == RebarStyle.StirrupTie; } catch { return true; }
+        }
     }
 }

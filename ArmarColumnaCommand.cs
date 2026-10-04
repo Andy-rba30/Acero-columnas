@@ -64,6 +64,14 @@ namespace ColumnRebar
                 try { deg = Math.Round(h.HookAngle * 180 / Math.PI); } catch { }
                 hookAngles[h.Name] = deg;
             }
+            // catalogo de ganchos de estribo: el angulo que el proyecto no tenga se ofrece igualmente y el tipo se crea al armar
+            var projectAngles = new HashSet<double>(hookAngles.Values);
+            foreach (var entry in RebarGenerator.HookCatalog)
+                if (!projectAngles.Contains(entry.AngleDeg) && !hookTypes.Contains(entry.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    hookTypes.Add(entry.Name);
+                    hookAngles[entry.Name] = entry.AngleDeg;
+                }
 
             // --- 1. Analisis geometrico de cada elemento (solo lectura, sin transaccion) ---
             //        y armadura ya existente: propia del add-in (ARBA - Origen) o anterior al contrato (COL-… sin origen)

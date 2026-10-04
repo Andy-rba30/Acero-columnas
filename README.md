@@ -131,7 +131,12 @@ si el elemento la incluye).
 
 Los estribos y las grapas se crean con estilo *Estribo/atadura* (`StirrupTie`) y el
 tipo de gancho (`RebarHookType`) elegido en la ventana en los dos extremos
-(normalmente 135°). El plugin no sabe de antemano hacia qué lado va a poner Revit el
+(normalmente 135°). La ventana ofrece solo los ganchos **de estilo Estribo/atadura**
+del proyecto (los de estilo *Estándar* no: Revit no los admite en estribos) y, si al
+proyecto le falta algún ángulo, el **catálogo** del plugin lo ofrece igualmente
+(`Estribo - 90`, prolongación 6 diámetros; `Estribo - 135`, 6; `Estribo sismico - 135`,
+8; `Estribo - 180`, 4): el tipo se crea en el proyecto al armar y se avisa en el
+informe. El plugin no sabe de antemano hacia qué lado va a poner Revit el
 gancho: crea el primer estribo, lee su geometría real y, si el gancho asoma fuera del
 hormigón, lo borra, **invierte la orientación** y lo vuelve a crear (y lo avisa en
 el informe). El resto de estribos usan la orientación buena.
@@ -204,7 +209,8 @@ Armar avisa de qué falta.
 ```
 
 Los nombres de tipo de barra y de gancho pueden ser exactos o un fragmento
-(`"135"`, `"3/8"`); sin coincidencia no se arma, nunca se sustituye por otro tipo
+(`"135"`, `"3/8"`; el gancho puede ser también uno del catálogo); sin coincidencia no se
+arma, nunca se sustituye por otro tipo
 (`NameMatch.First` del común).
 
 ## Contrato ARBA-comun
